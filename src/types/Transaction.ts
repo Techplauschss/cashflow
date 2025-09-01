@@ -3,7 +3,7 @@ export interface Transaction {
   type: 'income' | 'expense';
   amount: number;
   description: string;
-  category: string;
+  location: string;
   date: string;
   timestamp: number;
 }
@@ -12,5 +12,5 @@ export interface TransactionFormData {
   type: 'income' | 'expense';
   amount: string;
   description: string;
-  category: string;
+  location: string;
 }
