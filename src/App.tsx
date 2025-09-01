@@ -1,9 +1,11 @@
 import './styles.css';
 import { useState, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
+import { TankenPage } from './components/TankenPage';
 import { addTransaction } from './services/transactionService';
 
-function App() {
+function HomePage() {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
@@ -243,6 +245,17 @@ function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/tanken" element={<TankenPage />} />
+      </Routes>
+    </Router>
   );
 }
 
