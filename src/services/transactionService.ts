@@ -1,4 +1,4 @@
-import { ref, push, onValue, off, query, orderByChild, startAt, endAt } from 'firebase/database';
+import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update } from 'firebase/database';
 import { database } from '../firebase';
 import type { Transaction, TransactionFormData } from '../types/Transaction';
 
@@ -133,4 +133,28 @@ export const getAvailableMonths = async (): Promise<Array<{ year: number; month:
       reject(error);
     }, { onlyOnce: true });
   });
+};
+
+// Funktion zum Aktualisieren des Kilometerstandes einer Transaktion
+export const updateKilometerstand = async (transactionId: string, kilometerstand: number): Promise<void> => {
+  const transactionRef = ref(database, `transactions/${transactionId}`);
+  
+  try {
+    await update(transactionRef, { kilometerstand });
+  } catch (error) {
+    console.error('Error updating kilometerstand:', error);
+    throw new Error('Fehler beim Aktualisieren des Kilometerstandes');
+  }
+};
+
+// Funktion zum Aktualisieren der Liter einer Transaktion
+export const updateLiter = async (transactionId: string, liter: number): Promise<void> => {
+  const transactionRef = ref(database, `transactions/${transactionId}`);
+  
+  try {
+    await update(transactionRef, { liter });
+  } catch (error) {
+    console.error('Error updating liter:', error);
+    throw new Error('Fehler beim Aktualisieren der Liter');
+  }
 };

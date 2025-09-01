@@ -18,9 +18,6 @@ export interface LazyTransactionListRef {
 
 export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) => {
   const [months, setMonths] = useState<MonthData[]>([]);
-  const [allMonths, setAllMonths] = useState<MonthData[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -30,41 +27,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
   const [kmInputs, setKmInputs] = useState<Record<string, string>>({});
   const [literInputs, setLiterInputs] = useState<Record<string, string>>({});
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
-
-  // Monatsname extrahieren (ohne Jahr)
-  const getMonthName = (monthData: MonthData): string => {
-    const date = new Date(monthData.year, monthData.month - 1);
-    return date.toLocaleDateString('de-DE', { month: 'long' });
-  };
-
-  // Berechnet die Bilanz für einen Monat
-  const calculateMonthBalance = (transactions: Transaction[]) => {
-    let income = 0;
-    let expenses = 0;
-    
-    transactions.forEach(transaction => {
-      const absoluteAmount = Math.abs(transaction.amount);
-      if (transaction.type === 'income') {
-        income += absoluteAmount;
-      } else {
-        expenses += absoluteAmount;
-      }
-    });
-    
-    const balance = income - expenses;
-    
-    return {
-      income,
-      expenses,
-      balance
-    };
-  };
-
-  // Text kürzen wenn länger als 30 Zeichen
-  const truncateText = (text: string, maxLength: number = 30): string => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength - 3) + '...';
-  };
 
   // Prüft ob eine Transaktion eine Tanken-Transaktion ist
   const isTankenTransaction = (description: string, type: string): boolean => {
@@ -202,43 +164,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
         isLoading: false,
       }));
 
-      // Alle Monate speichern
-      setAllMonths(monthsWithState);
-      
-      // Verfügbare Jahre extrahieren
-      const years = [...new Set(monthsWithState.map(m => m.year))].sort((a, b) => b - a);
-      setAvailableYears(years);
-      
-      // Monate für das aktuelle Jahr filtern
-      filterMonthsByYear(monthsWithState, selectedYear);
-      
+      setMonths(monthsWithState);
       setIsInitialLoading(false);
-      
-      // Lade Transaktionen für den aktuellen Monat automatisch (falls im ausgewählten Jahr)
-      const currentMonth = monthsWithState.find(month => 
-        month.monthYear === currentMonthYear && month.year === selectedYear
-      );
-      if (currentMonth) {
-        await loadTransactionsForMonth(currentMonth.year, currentMonth.month);
-      }
     } catch (error) {
       console.error('Error loading months:', error);
       setIsInitialLoading(false);
     }
-  };
-
-  // Filtere Monate nach Jahr
-  const filterMonthsByYear = (monthsData: MonthData[], year: number) => {
-    const filteredMonths = monthsData.filter(m => m.year === year);
-    setMonths(filteredMonths);
-  };
-
-  // Jahr-Handler
-  const handleYearChange = (year: number) => {
-    setSelectedYear(year);
-    filterMonthsByYear(allMonths, year);
-    setSearchTerm('');
-    setActiveSearchTerm('');
   };
 
   // Lade Transaktionen für einen Monat
@@ -400,13 +331,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
     loadAvailableMonths();
   }, []);
 
-  // Jahr-Wechsel Effect
-  useEffect(() => {
-    if (allMonths.length > 0) {
-      filterMonthsByYear(allMonths, selectedYear);
-    }
-  }, [selectedYear, allMonths]);
-
   // Loading-Zustand
   if (isInitialLoading) {
     return (
@@ -436,31 +360,11 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
 
   // Haupt-Render
   return (
-    <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-4 sm:p-8 shadow-2xl mt-4 sm:mt-8">
-      <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-          {/* Title and Year Selection - direkt nebeneinander */}
-          <div className="flex items-center space-x-3">
-            <h2 className="text-xl sm:text-2xl font-semibold text-white">Transaktionen</h2>
-            
-            {/* Jahresauswahl als Dropdown - direkt neben dem Titel */}
-            {availableYears.length > 1 && (
-              <select
-                value={selectedYear}
-                onChange={(e) => handleYearChange(parseInt(e.target.value))}
-                className="px-3 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
-              >
-                {availableYears.map(year => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        </div>
+    <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+        <h2 className="text-2xl font-semibold text-white mb-4 sm:mb-0">Transaktionen</h2>
         
-        {/* Suchfeld - Mobile optimiert */}
+        {/* Suchfeld */}
         <div className="relative w-full sm:w-80">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -469,11 +373,11 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
           </div>
           <input
             type="text"
-            placeholder="Suchen... (Enter zum Suchen)"
+            placeholder="Suchen nach Beschreibung, Ort, Betrag oder Datum... (Enter zum Suchen)"
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="block w-full pl-10 pr-10 py-2 sm:py-2 border border-slate-600/30 rounded-lg bg-slate-800/50 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            className="block w-full pl-10 pr-10 py-2 border border-slate-600/30 rounded-lg bg-slate-800/50 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           />
           {searchTerm && (
             <button
@@ -485,10 +389,9 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
                   month: 'long',
                   year: 'numeric',
                 });
-                // Nur Monate des ausgewählten Jahres berücksichtigen
                 setMonths(prev => prev.map(month => ({
                   ...month,
-                  isExpanded: month.monthYear === currentMonthYear && month.year === selectedYear
+                  isExpanded: month.monthYear === currentMonthYear
                 })));
               }}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors"
@@ -512,7 +415,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-slate-300">
-                  {getMonthName(monthData)}
+                  {monthData.monthYear}
                   <span className="ml-2 text-sm text-slate-500">
                     ({(() => {
                       if (!monthData.transactions) return monthData.count;
@@ -580,141 +483,78 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
                         return (
                           <div
                             key={transaction.id}
-                            className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-3 sm:p-4 hover:bg-slate-800/50 transition-all"
+                            className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 hover:bg-slate-800/50 transition-all"
                           >
-                            <div className="flex items-start sm:items-center">
-                              <div className="flex-1 min-w-0">
-                                <div>
-                                  <h3 className="text-white font-medium text-sm md:text-base break-words">
-                                    {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
-                                  </h3>
-                                  <span className="text-xs text-slate-500 mt-1 block">
-                                    {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
-                                  </span>
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-4">
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center space-x-3">
+                                        <h3 className="text-white font-medium text-sm md:text-base">
+                                          {highlightSearchTerm(transaction.description, searchTerm === activeSearchTerm ? activeSearchTerm : '')} • {highlightSearchTerm(transaction.location, searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                                        </h3>
+                                        {isTanken && (
+                                          <div className="flex items-center space-x-2">
+                                            <input
+                                              type="text"
+                                              placeholder="km"
+                                              value={getKilometerDisplayValue(transaction)}
+                                              onChange={(e) => handleKilometerInput(transaction.id, e.target.value)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="w-24 px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
+                                            />
+                                            <span className="text-xs text-slate-400">km</span>
+                                            <input
+                                              type="text"
+                                              placeholder="Liter"
+                                              value={getLiterDisplayValue(transaction)}
+                                              onChange={(e) => handleLiterInput(transaction.id, e.target.value)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="w-24 px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
+                                            />
+                                            <span className="text-xs text-slate-400">Liter</span>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSaveTankenData(transaction.id);
+                                              }}
+                                              disabled={savingStates[transaction.id]}
+                                              className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            >
+                                              {savingStates[transaction.id] ? 'Speichert...' : 'Speichern'}
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-slate-400 ml-4">
+                                        {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                               
-                              {isTanken && (
-                                <div className="hidden sm:flex items-center space-x-2 mr-12">
-                                  <input
-                                    type="text"
-                                    placeholder="km"
-                                    value={getKilometerDisplayValue(transaction)}
-                                    onChange={(e) => handleKilometerInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-24 px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">km</span>
-                                  <input
-                                    type="text"
-                                    placeholder="Liter"
-                                    value={getLiterDisplayValue(transaction)}
-                                    onChange={(e) => handleLiterInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-24 px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">Liter</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSaveTankenData(transaction.id);
-                                    }}
-                                    disabled={savingStates[transaction.id]}
-                                    className="px-2 py-1 text-xs bg-slate-600/50 hover:bg-slate-500/50 disabled:bg-slate-600/30 text-slate-300 hover:text-white border border-slate-500/30 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                  >
-                                    {savingStates[transaction.id] ? 'Speichert...' : 'Speichern'}
-                                  </button>
-                                </div>
-                              )}
-                              
-                              <div className="text-right ml-2 sm:ml-0">
-                                <div className={`text-sm sm:text-base md:text-lg font-semibold ${
-                                  transaction.type === 'income' 
-                                    ? 'text-green-400' 
-                                    : 'text-red-400'
-                                }`}>
-                                  {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
+                              <div className="flex items-center space-x-3">
+                                <div className="text-right">
+                                  <div className={`text-base md:text-lg font-semibold ${
+                                    transaction.type === 'income' 
+                                      ? 'text-green-400' 
+                                      : 'text-red-400'
+                                  }`}>
+                                    {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                            
-                            {/* Mobile Tanken-Eingaben */}
-                            {isTanken && (
-                              <div className="sm:hidden mt-3 pt-3 border-t border-slate-600/30">
-                                <div className="flex items-center space-x-2">
-                                  <input
-                                    type="text"
-                                    placeholder="km"
-                                    value={getKilometerDisplayValue(transaction)}
-                                    onChange={(e) => handleKilometerInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-20 px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">km</span>
-                                  <input
-                                    type="text"
-                                    placeholder="L"
-                                    value={getLiterDisplayValue(transaction)}
-                                    onChange={(e) => handleLiterInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-16 px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">L</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSaveTankenData(transaction.id);
-                                    }}
-                                    disabled={savingStates[transaction.id]}
-                                    className="px-4 py-2 text-sm bg-slate-600/50 hover:bg-slate-500/50 disabled:bg-slate-600/30 text-slate-300 hover:text-white border border-slate-500/30 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                  >
-                                    {savingStates[transaction.id] ? '...' : 'Speichern'}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       });
                     })()}
-                    
-                    {/* Monatsbilanz - nur anzeigen wenn Transaktionen vorhanden */}
-                    {monthData.transactions && monthData.transactions.length > 0 && !activeSearchTerm.trim() && (
-                      (() => {
-                        const balance = calculateMonthBalance(monthData.transactions);
-                        return (
-                          <div className="mt-4 pt-4 border-t border-slate-600/30">
-                            <div className="bg-slate-700/30 rounded-lg p-3 sm:p-4">
-                              <h4 className="text-white font-medium text-sm mb-3">Monatsbilanz</h4>
-                              <div className="grid grid-cols-3 gap-4 text-sm">
-                                <div className="text-center">
-                                  <div className="text-green-400 font-semibold">
-                                    +{formatAmount(Math.abs(balance.income))}
-                                  </div>
-                                  <div className="text-slate-400 text-xs mt-1">Einnahmen</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="text-red-400 font-semibold">
-                                    -{formatAmount(Math.abs(balance.expenses))}
-                                  </div>
-                                  <div className="text-slate-400 text-xs mt-1">Ausgaben</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className={`font-semibold ${balance.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {balance.balance >= 0 ? '+' : ''}{formatAmount(Math.abs(balance.balance))}
-                                  </div>
-                                  <div className="text-slate-400 text-xs mt-1">Bilanz</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()
-                    )}
                   </>
                 )}
-            
-            {monthData.transactions && monthData.transactions.length === 0 && !monthData.isLoading && (
+                
+                {monthData.transactions && monthData.transactions.length === 0 && !monthData.isLoading && (
                   <div className="text-center py-4 text-slate-400">
                     Keine Transaktionen in diesem Monat gefunden.
                   </div>

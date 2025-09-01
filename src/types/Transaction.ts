@@ -6,6 +6,8 @@ export interface Transaction {
   location: string;
   date: string;
   timestamp: number;
+  kilometerstand?: number; // Optional: Kilometerstand für Tanken/Sprit-Transaktionen
+  liter?: number; // Optional: Liter für Tanken/Sprit-Transaktionen
 }
 
 export interface TransactionFormData {
