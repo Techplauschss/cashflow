@@ -1,6 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { Transaction } from '../types/Transaction';
 import { getTransactionsForMonth, getAvailableMonths, updateKilometerstand, updateLiter } from '../services/transactionService';
+import { DropdownMenu } from './DropdownMenu';
 
 interface MonthData {
   year: number;
@@ -642,57 +643,48 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                                 </div>
                               </div>
 
-                              <div className="flex items-center ml-3 space-x-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                                {onEditTransaction && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onEditTransaction(transaction);
-                                    }}
-                                    className="p-2 text-blue-500 hover:text-blue-400 hover:bg-blue-500/20 rounded-lg transition-all border border-blue-500/30 hover:border-blue-400/50"
-                                    title="Transaktion bearbeiten"
-                                  >
-                                    <svg
-                                      className="w-4 h-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                      />
-                                    </svg>
-                                  </button>
-                                )}
-
-                                {onDeleteTransaction && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onDeleteTransaction(transaction.id);
-                                    }}
-                                    className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all border border-red-500/30 hover:border-red-400/50"
-                                    title="Transaktion löschen"
-                                  >
-                                    <svg
-                                      className="w-4 h-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                      />
-                                    </svg>
-                                  </button>
-                                )}
-                              </div>
+                              {(onEditTransaction || onDeleteTransaction) && (
+                                <div className="ml-3 opacity-60 group-hover:opacity-100 transition-opacity">
+                                  <DropdownMenu
+                                    trigger={
+                                      <button
+                                        className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 rounded-lg transition-all"
+                                        title="Aktionen"
+                                      >
+                                        <svg
+                                          className="w-4 h-4"
+                                          fill="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                        </svg>
+                                      </button>
+                                    }
+                                    items={[
+                                      ...(onEditTransaction ? [{
+                                        label: 'Bearbeiten',
+                                        icon: (
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                          </svg>
+                                        ),
+                                        onClick: () => onEditTransaction(transaction),
+                                        variant: 'default' as const
+                                      }] : []),
+                                      ...(onDeleteTransaction ? [{
+                                        label: 'Löschen',
+                                        icon: (
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        ),
+                                        onClick: () => onDeleteTransaction(transaction.id),
+                                        variant: 'destructive' as const
+                                      }] : [])
+                                    ]}
+                                  />
+                                </div>
+                              )}
                             </div>
                             
                             {/* Mobile Tanken-Eingaben */}
