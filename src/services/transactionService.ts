@@ -1,4 +1,4 @@
-import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update } from 'firebase/database';
+import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update, remove } from 'firebase/database';
 import { database } from '../firebase';
 import type { Transaction, TransactionFormData } from '../types/Transaction';
 
@@ -156,5 +156,44 @@ export const updateLiter = async (transactionId: string, liter: number): Promise
   } catch (error) {
     console.error('Error updating liter:', error);
     throw new Error('Fehler beim Aktualisieren der Liter');
+  }
+};
+
+// Funktion zum Löschen einer Transaktion
+export const deleteTransaction = async (transactionId: string): Promise<void> => {
+  const transactionRef = ref(database, `transactions/${transactionId}`);
+  
+  try {
+    await remove(transactionRef);
+  } catch (error) {
+    console.error('Error deleting transaction:', error);
+    throw new Error('Fehler beim Löschen der Transaktion');
+  }
+};
+
+// Funktion zum Aktualisieren einer Transaktion
+export const updateTransaction = async (
+  transactionId: string, 
+  updatedData: {
+    description: string;
+    amount: number;
+    location: string;
+    type: 'income' | 'expense';
+  }
+): Promise<void> => {
+  const transactionRef = ref(database, `transactions/${transactionId}`);
+  
+  try {
+    await update(transactionRef, {
+      description: updatedData.description,
+      amount: updatedData.amount,
+      location: updatedData.location,
+      type: updatedData.type,
+      // Aktualisiere auch den Timestamp für die Sortierung
+      lastModified: Date.now()
+    });
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    throw new Error('Fehler beim Aktualisieren der Transaktion');
   }
 };

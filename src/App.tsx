@@ -4,7 +4,9 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
 import { TankenPage } from './components/TankenPage';
 import { BilanzPage } from './components/BilanzPage';
-import { addTransaction } from './services/transactionService';
+import { ConfirmModal } from './components/ConfirmModal';
+import { EditTransactionModal } from './components/EditTransactionModal';
+import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
 
 function HomePage() {
   const [description, setDescription] = useState('');
@@ -13,6 +15,12 @@ function HomePage() {
   const [type, setType] = useState<'E' | 'A'>('A'); // E = Einnahme, A = Ausgabe
   const [isLoading, setIsLoading] = useState(false);
   const transactionListRef = useRef<LazyTransactionListRef>(null);
+  
+  // Modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [transactionToEdit, setTransactionToEdit] = useState<any>(null);
 
   const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Erlaubte Tasten: Zahlen (0-9), Komma, Punkt, Backspace, Delete, Tab, Enter, Pfeiltasten
@@ -97,6 +105,62 @@ function HomePage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDeleteTransaction = async (transactionId: string) => {
+    setTransactionToDelete(transactionId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteTransaction = async () => {
+    if (!transactionToDelete) return;
+
+    try {
+      await deleteTransaction(transactionToDelete);
+      
+      // Aktualisiere die Transaktionsliste
+      if (transactionListRef.current) {
+        transactionListRef.current.refreshData();
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Fehler beim Löschen der Transaktion. Bitte versuchen Sie es erneut.');
+    } finally {
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+    }
+  };
+
+  const cancelDeleteTransaction = () => {
+    setShowDeleteModal(false);
+    setTransactionToDelete(null);
+  };
+
+  const handleEditTransaction = (transaction: any) => {
+    setTransactionToEdit(transaction);
+    setShowEditModal(true);
+  };
+
+  const saveEditTransaction = async (transactionId: string, updatedData: any) => {
+    try {
+      await updateTransaction(transactionId, updatedData);
+      
+      // Aktualisiere die Transaktionsliste
+      if (transactionListRef.current) {
+        transactionListRef.current.refreshData();
+      }
+      
+      setShowEditModal(false);
+      setTransactionToEdit(null);
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      alert('Fehler beim Aktualisieren der Transaktion. Bitte versuchen Sie es erneut.');
+    }
+  };
+
+  const cancelEditTransaction = () => {
+    setShowEditModal(false);
+    setTransactionToEdit(null);
   };
 
   return (
@@ -243,7 +307,11 @@ function HomePage() {
         </div>
 
         {/* Transaction List */}
-        <LazyTransactionList ref={transactionListRef} />
+        <LazyTransactionList 
+          ref={transactionListRef} 
+          onDeleteTransaction={handleDeleteTransaction}
+          onEditTransaction={handleEditTransaction}
+        />
 
         {/* Footer */}
         <div className="text-center mt-4 sm:mt-8">
@@ -252,6 +320,26 @@ function HomePage() {
           </p>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Transaktion löschen"
+        message="Sind Sie sicher, dass Sie diese Transaktion dauerhaft löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+        confirmText="Löschen"
+        cancelText="Abbrechen"
+        onConfirm={confirmDeleteTransaction}
+        onCancel={cancelDeleteTransaction}
+        isDestructive={true}
+      />
+
+      {/* Edit Transaction Modal */}
+      <EditTransactionModal
+        isOpen={showEditModal}
+        transaction={transactionToEdit}
+        onSave={saveEditTransaction}
+        onCancel={cancelEditTransaction}
+      />
     </div>
   );
 }
