@@ -27,10 +27,15 @@ export const TankenPage = () => {
       const allTransactionsArrays = await Promise.all(allTransactionsPromises);
       const allTransactions = allTransactionsArrays.flat();
       
-      // Filtere nur Tanken-Transaktionen
-      const tankenOnly = allTransactions.filter(transaction =>
-        transaction.description.toLowerCase().includes('tanken')
-      );
+      // Filtere nur Tanken- und Sprit-Transaktionen (nur Ausgaben)
+      const tankenOnly = allTransactions.filter(transaction => {
+        const isExpense = transaction.type === 'expense';
+        const description = transaction.description.toLowerCase();
+        const hasTanken = description.includes('tanken');
+        const hasSprit = description.includes('sprit') && !description.includes('sprite');
+        const isTankenOrSprit = hasTanken || hasSprit;
+        return isExpense && isTankenOrSprit;
+      });
       
       // Sortiere nach Datum (neueste zuerst)
       tankenOnly.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -67,10 +72,10 @@ export const TankenPage = () => {
         <div className="container mx-auto max-w-4xl">
           <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl">
             <div className="text-center">
-              <h1 className="text-3xl font-bold text-white mb-4">Tanken Übersicht</h1>
+              <h1 className="text-3xl font-bold text-white mb-4">Tanken & Sprit Übersicht</h1>
               <div className="flex items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                <span className="ml-3 text-slate-400">Lade Tanken-Daten...</span>
+                <span className="ml-3 text-slate-400">Lade Tanken & Sprit-Daten...</span>
               </div>
             </div>
           </div>
@@ -99,7 +104,7 @@ export const TankenPage = () => {
         <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
             <h1 className="text-3xl font-bold text-white mb-4 sm:mb-0">
-              ⛽ Tanken Übersicht
+              ⛽ Tanken & Sprit Übersicht
             </h1>
             <div className="text-right">
               <div className="text-sm text-slate-400">Gesamt ausgegeben</div>
@@ -113,19 +118,19 @@ export const TankenPage = () => {
           {tankenTransactions.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Anzahl Tankstellen-Besuche</div>
+                <div className="text-slate-400 text-sm">Anzahl Tanken/Sprit-Käufe</div>
                 <div className="text-2xl font-semibold text-white">
                   {tankenTransactions.length}
                 </div>
               </div>
               <div className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Durchschnitt pro Tankfüllung</div>
+                <div className="text-slate-400 text-sm">Durchschnitt pro Kauf</div>
                 <div className="text-2xl font-semibold text-orange-400">
                   {formatAmount(average)}
                 </div>
               </div>
               <div className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Letzter Tankbesuch</div>
+                <div className="text-slate-400 text-sm">Letzter Kauf</div>
                 <div className="text-lg font-semibold text-blue-400">
                   {tankenTransactions.length > 0 
                     ? new Date(tankenTransactions[0].date).toLocaleDateString('de-DE')
@@ -139,12 +144,12 @@ export const TankenPage = () => {
           {/* Transaktionsliste */}
           <div className="space-y-3">
             <h2 className="text-xl font-semibold text-white mb-4">
-              Alle Tanken-Transaktionen ({tankenTransactions.length})
+              Alle Tanken & Sprit-Transaktionen ({tankenTransactions.length})
             </h2>
             
             {tankenTransactions.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
-                Keine Tanken-Transaktionen gefunden.
+                Keine Tanken- oder Sprit-Transaktionen gefunden.
               </div>
             ) : (
               tankenTransactions.map((transaction) => (

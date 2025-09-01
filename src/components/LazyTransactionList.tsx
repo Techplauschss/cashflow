@@ -24,8 +24,16 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const navigate = useNavigate();
 
-  const isTankenTransaction = (description: string): boolean => {
-    return description.toLowerCase().includes('tanken');
+  const isTankenTransaction = (description: string, type: string): boolean => {
+    // Nur bei Ausgaben (expenses) prüfen
+    if (type !== 'expense') return false;
+    
+    const lowerDescription = description.toLowerCase();
+    // Prüfe auf "tanken" oder "sprit" aber nicht "sprite"
+    const hasTanken = lowerDescription.includes('tanken');
+    const hasSprit = lowerDescription.includes('sprit') && !lowerDescription.includes('sprite');
+    
+    return hasTanken || hasSprit;
   };
 
   const handleTankenClick = () => {
@@ -386,12 +394,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
                       }
                       
                       return sortedTransactions.map((transaction) => {
-                        const isTanken = isTankenTransaction(transaction.description);
+                        const isTanken = isTankenTransaction(transaction.description, transaction.type);
                         
                         return (
                           <div
                             key={transaction.id}
-                            className={`bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 transition-all ${
+                            className={`group bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 transition-all ${
                               isTanken 
                                 ? 'hover:bg-blue-800/30 hover:border-blue-500/50 cursor-pointer' 
                                 : 'hover:bg-slate-800/50'
@@ -407,27 +415,43 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef>((_, ref) =
                                       <h3 className="text-white font-medium text-sm md:text-base">
                                         {highlightSearchTerm(transaction.description, searchTerm)} • {highlightSearchTerm(transaction.location, searchTerm)}
                                       </h3>
-                                      {isTanken && (
-                                        <div className="ml-2 flex items-center">
-                                          <span className="text-blue-400 text-xs">⛽</span>
-                                          <svg className="w-4 h-4 ml-1 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-1M10 6V5a2 2 0 112 0v1M10 6h2m0 0v1m0-1h2m-2 1v1" />
-                                          </svg>
-                                        </div>
-                                      )}
                                     </div>
                                     <div className="text-xs text-slate-400 mt-1">
                                       {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm)}
                                     </div>
                                   </div>
                                   
-                                  <div className="text-right">
-                                    <div className={`text-base md:text-lg font-semibold ${
-                                      transaction.type === 'income' 
-                                        ? 'text-green-400' 
-                                        : 'text-red-400'
-                                    }`}>
-                                      {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
+                                  <div className="flex items-center space-x-3">
+                                    {isTanken && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleTankenClick();
+                                        }}
+                                        className="relative overflow-hidden px-3 py-1.5 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 
+                                                 border border-blue-400/30 rounded-lg backdrop-blur-sm 
+                                                 hover:from-blue-500/30 hover:to-cyan-500/30 hover:border-blue-400/60 
+                                                 transform hover:scale-105 transition-all duration-200 ease-out
+                                                 opacity-0 group-hover:opacity-100"
+                                        title="Tanken-Übersicht öffnen"
+                                      >
+                                        <div className="flex items-center space-x-1.5">
+                                          <span className="text-blue-300 text-sm">⛽</span>
+                                          <span className="text-blue-200 text-xs font-medium">Übersicht</span>
+                                        </div>
+                                        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-cyan-400/10 
+                                                      opacity-0 hover:opacity-100 transition-opacity duration-200"></div>
+                                      </button>
+                                    )}
+                                    
+                                    <div className="text-right">
+                                      <div className={`text-base md:text-lg font-semibold ${
+                                        transaction.type === 'income' 
+                                          ? 'text-green-400' 
+                                          : 'text-red-400'
+                                      }`}>
+                                        {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
