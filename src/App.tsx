@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
 import { TankenPage } from './components/TankenPage';
 import { BilanzPage } from './components/BilanzPage';
+import { PlannedExpensesPage } from './components/PlannedExpensesPage';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
@@ -141,7 +142,16 @@ function HomePage() {
     setShowEditModal(true);
   };
 
-  const saveEditTransaction = async (transactionId: string, updatedData: any) => {
+  const saveEditTransaction = async (
+    transactionId: string, 
+    updatedData: {
+      description: string;
+      amount: number;
+      location: string;
+      type: 'income' | 'expense';
+      date: string;
+    }
+  ) => {
     try {
       await updateTransaction(transactionId, updatedData);
       
@@ -357,24 +367,30 @@ function App() {
             <div className="w-16 sm:w-20 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-4 sm:mb-6 opacity-60"></div>
             
             {/* Navigation - Mobile optimiert */}
-            <div className="flex justify-center space-x-3 sm:space-x-6 mb-4 sm:mb-6">
+            <div className="flex justify-center space-x-2 sm:space-x-4 mb-4 sm:mb-6">
               <Link 
                 to="/" 
-                className="text-slate-300 hover:text-white transition-colors px-3 sm:px-4 py-2 rounded-lg hover:bg-white/10 text-sm sm:text-base"
+                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
               >
                 Übersicht
               </Link>
               <Link 
                 to="/bilanzen" 
-                className="text-slate-300 hover:text-white transition-colors px-3 sm:px-4 py-2 rounded-lg hover:bg-white/10 text-sm sm:text-base"
+                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
               >
                 Bilanzen
               </Link>
               <Link 
                 to="/tanken" 
-                className="text-slate-300 hover:text-white transition-colors px-3 sm:px-4 py-2 rounded-lg hover:bg-white/10 text-sm sm:text-base"
+                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
               >
                 Tankübersicht
+              </Link>
+              <Link 
+                to="/geplant" 
+                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
+              >
+                Geplante Ausgaben
               </Link>
             </div>
             
@@ -389,6 +405,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/bilanzen" element={<BilanzPage />} />
           <Route path="/tanken" element={<TankenPage />} />
+          <Route path="/geplant" element={<PlannedExpensesPage />} />
         </Routes>
       </div>
     </Router>

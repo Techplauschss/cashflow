@@ -37,10 +37,20 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [literInputs, setLiterInputs] = useState<Record<string, string>>({});
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
 
+  // Aktuelles Datum für Filter
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1; // getMonth() gibt 0-11 zurück, wir brauchen 1-12
+
   // Monatsname extrahieren (ohne Jahr)
   const getMonthName = (monthData: MonthData): string => {
     const date = new Date(monthData.year, monthData.month - 1);
     return date.toLocaleDateString('de-DE', { month: 'long' });
+  };
+
+  // Prüft ob es sich um den aktuellen Monat handelt
+  const isCurrentMonth = (year: number, month: number): boolean => {
+    return year === currentYear && month === currentMonth;
   };
 
   // Berechnet die Bilanz für einen Monat
@@ -341,6 +351,29 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     });
   };
 
+  // Neue Funktion: Sortiert Transaktionen basierend auf dem Monat
+  const sortTransactions = (transactions: Transaction[], year: number, month: number): Transaction[] => {
+    // Prüfe ob es der aktuelle Monat ist
+    if (isCurrentMonth(year, month)) {
+      // Für den aktuellen Monat: Ausgaben oben (nach Betrag), dann Einnahmen unten (nach Betrag)
+      return [...transactions].sort((a, b) => {
+        // 1. Zuerst nach Typ sortieren (Ausgaben vor Einnahmen)
+        if (a.type !== b.type) {
+          return a.type === 'expense' ? -1 : 1; // expense (-1) kommt vor income (1)
+        }
+        
+        // 2. Innerhalb des gleichen Typs nach Betrag sortieren (größte zuerst)
+        const amountA = Math.abs(Number(a.amount));
+        const amountB = Math.abs(Number(b.amount));
+        
+        return amountB - amountA; // Größte Beträge zuerst
+      });
+    } else {
+      // Für alle anderen Monate: Bestehende Sortierung nach Betrag
+      return sortTransactionsByAmount(transactions);
+    }
+  };
+
   // Suchbegriff hervorheben
   const highlightSearchTerm = (text: string, searchTerm: string): React.ReactElement => {
     if (!searchTerm.trim()) {
@@ -570,7 +603,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                   <>
                     {(() => {
                       const filteredTransactions = filterTransactions(monthData.transactions);
-                      const sortedTransactions = sortTransactionsByAmount(filteredTransactions);
+                      const sortedTransactions = sortTransactions(filteredTransactions, monthData.year, monthData.month);
                       
                       if (filteredTransactions.length === 0 && activeSearchTerm.trim() && searchTerm === activeSearchTerm) {
                         return (
@@ -727,8 +760,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                       });
                     })()}
                     
-                    {/* Monatsbilanz - nur anzeigen wenn Transaktionen vorhanden */}
-                    {monthData.transactions && monthData.transactions.length > 0 && !activeSearchTerm.trim() && (
+                    {/* Monatsbilanz - nur anzeigen wenn Transaktionen vorhanden und NICHT der aktuelle Monat */}
+                    {monthData.transactions && monthData.transactions.length > 0 && !activeSearchTerm.trim() && !isCurrentMonth(monthData.year, monthData.month) && (
                       (() => {
                         const balance = calculateMonthBalance(monthData.transactions);
                         return (

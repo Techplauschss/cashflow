@@ -71,6 +71,27 @@ export const TankenPage = () => {
 
   const { total, average } = calculateTotalAndAverage();
 
+  // Berechne gefahrene Kilometer seit dem letzten Tanken
+  const calculateKmSinceLastFill = (currentTransaction: Transaction, index: number): number | null => {
+    // Suche nach der nächsten Transaktion mit Kilometerstand (die chronologisch vorher liegt)
+    const currentKm = currentTransaction.kilometerstand;
+    if (!currentKm) return null;
+
+    // Da die Liste nach Datum sortiert ist (neueste zuerst), suchen wir nach dem nächsten Eintrag mit km_Stand
+    for (let i = index + 1; i < tankenTransactions.length; i++) {
+      const previousTransaction = tankenTransactions[i];
+      if (previousTransaction.kilometerstand) {
+        return currentKm - previousTransaction.kilometerstand;
+      }
+    }
+    
+    return null; // Keine vorherige Transaktion mit Kilometerstand gefunden
+  };
+
+  const formatKilometers = (km: number): string => {
+    return km.toLocaleString('de-DE');
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center px-4 pb-8">
@@ -144,7 +165,10 @@ export const TankenPage = () => {
                 Keine Tanken- oder Sprit-Transaktionen gefunden.
               </div>
             ) : (
-              tankenTransactions.map((transaction) => (
+              tankenTransactions.map((transaction, index) => {
+                const kmSinceLastFill = calculateKmSinceLastFill(transaction, index);
+                
+                return (
                 <div
                   key={transaction.id}
                   className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-3 sm:p-4 hover:bg-slate-800/50 transition-all"
@@ -156,11 +180,16 @@ export const TankenPage = () => {
                           {truncateText(`${transaction.description} • ${transaction.location}`)}
                         </h3>
                         {/* Kilometerstand und Liter modern anzeigen */}
-                        {(transaction.kilometerstand || transaction.liter) && (
+                        {(transaction.kilometerstand || transaction.liter || kmSinceLastFill) && (
                           <div className="flex items-center gap-1 sm:gap-2 mt-1 sm:mt-0">
                             {transaction.kilometerstand && (
                               <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                 {transaction.kilometerstand.toLocaleString('de-DE')} km
+                              </span>
+                            )}
+                            {kmSinceLastFill && kmSinceLastFill > 0 && (
+                              <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                +{formatKilometers(kmSinceLastFill)} km
                               </span>
                             )}
                             {transaction.liter && (
@@ -183,7 +212,7 @@ export const TankenPage = () => {
                     </div>
                   </div>
                 </div>
-              ))
+              );})
             )}
           </div>
         </div>

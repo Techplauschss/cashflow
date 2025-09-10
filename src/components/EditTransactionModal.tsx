@@ -9,6 +9,7 @@ interface EditTransactionModalProps {
     amount: number;
     location: string;
     type: 'income' | 'expense';
+    date: string;
   }) => void;
   onCancel: () => void;
 }
@@ -23,6 +24,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [date, setDate] = useState('');
 
   useEffect(() => {
     if (transaction) {
@@ -30,6 +32,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setAmount(Math.abs(transaction.amount).toFixed(2).replace('.', ','));
       setLocation(transaction.location);
       setType(transaction.type);
+      setDate(transaction.date);
     }
   }, [transaction]);
 
@@ -93,7 +96,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       description: description.trim(),
       amount: numericAmount,
       location: location.trim() || 'Unbekannt',
-      type
+      type,
+      date
     });
   };
 
@@ -192,6 +196,20 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 onChange={(e) => setLocation(e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="z.B. Supermarkt, Online..."
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Datum
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                required
               />
             </div>
 

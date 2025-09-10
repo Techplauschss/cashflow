@@ -2,7 +2,7 @@ import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update, r
 import { database } from '../firebase';
 import type { Transaction, TransactionFormData } from '../types/Transaction';
 
-// Funktion zum Hinzufügen einer neuen Transaktion
+// Funktion zum Hinzufügen einer neuen Transaktion (normale, nicht geplante)
 export const addTransaction = async (transactionData: TransactionFormData): Promise<string> => {
   const transactionsRef = ref(database, 'transactions');
   
@@ -14,8 +14,9 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     amount: amount,
     description: transactionData.description,
     location: transactionData.location,
-    date: new Date().toISOString().split('T')[0], // YYYY-MM-DD Format
+    date: new Date().toISOString().split('T')[0], // Immer aktuelles Datum für normale Transaktionen
     timestamp: Date.now(),
+    isPlanned: false, // Normale Transaktionen sind nicht geplant
   };
 
   try {
@@ -27,17 +28,19 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
   }
 };
 
-// Funktion zum Abrufen aller Transaktionen
+// Funktion zum Abrufen aller Transaktionen (ohne geplante)
 export const subscribeToTransactions = (callback: (transactions: Transaction[]) => void): (() => void) => {
   const transactionsRef = ref(database, 'transactions');
   
   const unsubscribe = onValue(transactionsRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
-        id,
-        ...(transaction as Omit<Transaction, 'id'>),
-      }));
+      const transactions: Transaction[] = Object.entries(data)
+        .map(([id, transaction]) => ({
+          id,
+          ...(transaction as Omit<Transaction, 'id'>),
+        }))
+        .filter(transaction => !transaction.isPlanned); // Filtere geplante Transaktionen aus
       callback(transactions);
     } else {
       callback([]);
@@ -50,7 +53,7 @@ export const subscribeToTransactions = (callback: (transactions: Transaction[]) 
   return () => off(transactionsRef, 'value', unsubscribe);
 };
 
-// Funktion zum Abrufen von Transaktionen für einen bestimmten Monat
+// Funktion zum Abrufen von Transaktionen für einen bestimmten Monat (ohne geplante)
 export const getTransactionsForMonth = async (year: number, month: number): Promise<Transaction[]> => {
   const transactionsRef = ref(database, 'transactions');
   
@@ -69,10 +72,12 @@ export const getTransactionsForMonth = async (year: number, month: number): Prom
     onValue(monthQuery, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
-          id,
-          ...(transaction as Omit<Transaction, 'id'>),
-        }));
+        const transactions: Transaction[] = Object.entries(data)
+          .map(([id, transaction]) => ({
+            id,
+            ...(transaction as Omit<Transaction, 'id'>),
+          }))
+          .filter(transaction => !transaction.isPlanned); // Filtere geplante Transaktionen aus
         resolve(transactions);
       } else {
         resolve([]);
@@ -179,6 +184,7 @@ export const updateTransaction = async (
     amount: number;
     location: string;
     type: 'income' | 'expense';
+    date: string;
   }
 ): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
@@ -189,11 +195,116 @@ export const updateTransaction = async (
       amount: updatedData.amount,
       location: updatedData.location,
       type: updatedData.type,
+      date: updatedData.date,
       // Aktualisiere auch den Timestamp für die Sortierung
       lastModified: Date.now()
     });
   } catch (error) {
     console.error('Error updating transaction:', error);
     throw new Error('Fehler beim Aktualisieren der Transaktion');
+  }
+};
+
+// ===== GEPLANTE TRANSAKTIONEN =====
+
+// Funktion zum Hinzufügen einer geplanten Transaktion
+export const addPlannedTransaction = async (transactionData: TransactionFormData): Promise<string> => {
+  const plannedTransactionsRef = ref(database, 'plannedTransactions');
+  
+  // Konvertiere den Betrag von String zu Number
+  const amount = parseFloat(transactionData.amount.replace(/\./g, '').replace(',', '.'));
+  
+  const transaction: Omit<Transaction, 'id'> = {
+    type: transactionData.type,
+    amount: amount,
+    description: transactionData.description,
+    location: transactionData.location,
+    date: transactionData.date || new Date().toISOString().split('T')[0], // Verwende das übergebene Datum oder heute
+    timestamp: Date.now(),
+    isPlanned: true,
+  };
+
+  try {
+    const newTransactionRef = await push(plannedTransactionsRef, transaction);
+    return newTransactionRef.key!;
+  } catch (error) {
+    console.error('Error adding planned transaction:', error);
+    throw new Error('Fehler beim Hinzufügen der geplanten Transaktion');
+  }
+};
+
+// Funktion zum Abrufen aller geplanten Transaktionen
+export const getPlannedTransactions = async (): Promise<Transaction[]> => {
+  const plannedTransactionsRef = ref(database, 'plannedTransactions');
+  
+  return new Promise((resolve, reject) => {
+    onValue(plannedTransactionsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
+          id,
+          ...(transaction as Omit<Transaction, 'id'>),
+        }));
+        resolve(transactions);
+      } else {
+        resolve([]);
+      }
+    }, (error) => {
+      console.error('Error fetching planned transactions:', error);
+      reject(error);
+    }, { onlyOnce: true });
+  });
+};
+
+// Funktion zum Löschen einer geplanten Transaktion
+export const deletePlannedTransaction = async (transactionId: string): Promise<void> => {
+  const plannedTransactionRef = ref(database, `plannedTransactions/${transactionId}`);
+  
+  try {
+    await remove(plannedTransactionRef);
+  } catch (error) {
+    console.error('Error deleting planned transaction:', error);
+    throw new Error('Fehler beim Löschen der geplanten Transaktion');
+  }
+};
+
+// Funktion zum Konvertieren einer geplanten Transaktion zu einer echten Transaktion
+export const convertPlannedToRealTransaction = async (plannedTransactionId: string): Promise<string> => {
+  try {
+    // Hole die geplante Transaktion
+    const plannedTransactionRef = ref(database, `plannedTransactions/${plannedTransactionId}`);
+    
+    return new Promise((resolve, reject) => {
+      onValue(plannedTransactionRef, async (snapshot) => {
+        const plannedTransaction = snapshot.val();
+        if (!plannedTransaction) {
+          reject(new Error('Geplante Transaktion nicht gefunden'));
+          return;
+        }
+
+        // Erstelle eine neue echte Transaktion
+        const realTransactionData: TransactionFormData = {
+          type: plannedTransaction.type,
+          amount: plannedTransaction.amount.toString(),
+          description: plannedTransaction.description,
+          location: plannedTransaction.location,
+        };
+
+        try {
+          // Füge die echte Transaktion hinzu
+          const newTransactionId = await addTransaction(realTransactionData);
+          
+          // Lösche die geplante Transaktion
+          await deletePlannedTransaction(plannedTransactionId);
+          
+          resolve(newTransactionId);
+        } catch (error) {
+          reject(error);
+        }
+      }, { onlyOnce: true });
+    });
+  } catch (error) {
+    console.error('Error converting planned transaction:', error);
+    throw new Error('Fehler beim Konvertieren der geplanten Transaktion');
   }
 };

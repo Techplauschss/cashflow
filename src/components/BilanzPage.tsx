@@ -18,6 +18,11 @@ export const BilanzPage = () => {
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Aktuelles Datum für Filter
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1; // getMonth() gibt 0-11 zurück, wir brauchen 1-12
+
   // Formatiert Beträge für die Anzeige
   const formatAmount = (amount: number): string => {
     return Math.abs(amount).toLocaleString('de-DE', {
@@ -52,13 +57,20 @@ export const BilanzPage = () => {
     setIsLoading(true);
     try {
       const months = await getAvailableMonths();
-      const years = [...new Set(months.map(m => m.year))].sort((a, b) => b - a);
+      
+      // Filtere den aktuellen Monat aus
+      const filteredMonths = months.filter(month => {
+        // Schließe den aktuellen Monat aus der Bilanz aus
+        return !(month.year === currentYear && month.month === currentMonth);
+      });
+      
+      const years = [...new Set(filteredMonths.map(m => m.year))].sort((a, b) => b - a);
       setAvailableYears(years);
 
-      // Lade Transaktionen für alle Monate
+      // Lade Transaktionen für alle Monate (außer dem aktuellen)
       const balances: MonthBalance[] = [];
       
-      for (const month of months) {
+      for (const month of filteredMonths) {
         try {
           const transactions = await getTransactionsForMonth(month.year, month.month);
           const balance = calculateBalance(transactions);
