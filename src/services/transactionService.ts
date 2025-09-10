@@ -102,10 +102,15 @@ export const getAvailableMonths = async (): Promise<Array<{ year: number; month:
           ...(transaction as Omit<Transaction, 'id'>),
         }));
         
+        // Filtere H+M Transaktionen aus (basierend auf Description)
+        const filteredTransactions = transactions.filter(transaction => 
+          !transaction.description.startsWith('H+') && !transaction.description.startsWith('M+')
+        );
+        
         // Gruppiere nach Monat und zähle
         const monthCounts = new Map<string, { year: number; month: number; count: number }>();
         
-        transactions.forEach(transaction => {
+        filteredTransactions.forEach(transaction => {
           const date = new Date(transaction.date);
           const year = date.getFullYear();
           const month = date.getMonth() + 1;

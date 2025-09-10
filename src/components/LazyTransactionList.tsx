@@ -1,6 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
-import { getTransactionsForMonth, getAvailableMonths, updateKilometerstand, updateLiter } from '../services/transactionService';
+import { getTransactionsForMonth, getAvailableMonths } from '../services/transactionService';
 import { DropdownMenu } from './DropdownMenu';
 
 interface MonthData {
@@ -31,11 +32,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [searchLoadingMonths, setSearchLoadingMonths] = useState<Set<string>>(new Set());
-  
-  // Tanken-spezifische States
-  const [kmInputs, setKmInputs] = useState<Record<string, string>>({});
-  const [literInputs, setLiterInputs] = useState<Record<string, string>>({});
-  const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
 
   // Aktuelles Datum für Filter
   const currentDate = new Date();
@@ -82,7 +78,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     return text.substring(0, maxLength - 3) + '...';
   };
 
-  // Prüft ob eine Transaktion eine Tanken-Transaktion ist
+  // Prüft ob eine Transaktion eine Tanken-Transaktion ist (nur für Anzeige)
   const isTankenTransaction = (description: string, type: string): boolean => {
     if (type !== 'expense') return false;
     
@@ -94,97 +90,9 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     return hasTanken || hasTanke || hasSprit;
   };
 
-  // Input-Handler für Kilometer
-  const handleKilometerInput = (transactionId: string, value: string) => {
-    setKmInputs(prev => ({ ...prev, [transactionId]: value }));
-  };
-
-  // Input-Handler für Liter
-  const handleLiterInput = (transactionId: string, value: string) => {
-    setLiterInputs(prev => ({ ...prev, [transactionId]: value }));
-  };
-
-  // Display-Werte für Kilometer
-  const getKilometerDisplayValue = (transaction: Transaction): string => {
-    const inputValue = kmInputs[transaction.id];
-    if (inputValue !== undefined) return inputValue;
-    
-    if (transaction.kilometerstand) {
-      return transaction.kilometerstand.toLocaleString('de-DE');
-    }
-    return '';
-  };
-
-  // Display-Werte für Liter
-  const getLiterDisplayValue = (transaction: Transaction): string => {
-    const inputValue = literInputs[transaction.id];
-    if (inputValue !== undefined) return inputValue;
-    
-    if (transaction.liter !== undefined && transaction.liter !== null) {
-      return transaction.liter.toString().replace('.', ',');
-    }
-    return '';
-  };
-
-  // Speicher-Funktion für Tanken-Daten
-  const handleSaveTankenData = async (transactionId: string) => {
-    setSavingStates(prev => ({ ...prev, [transactionId]: true }));
-    
-    try {
-      const kmInput = kmInputs[transactionId];
-      const literInput = literInputs[transactionId];
-      
-      console.log('Speichere Tanken-Daten für Transaction:', transactionId);
-      console.log('Kilometer:', kmInput, 'Liter:', literInput);
-      
-      // Speichere Kilometerstand wenn vorhanden
-      if (kmInput && kmInput.trim() !== '') {
-        const kmValue = kmInput.replace(',', '.');
-        const kmNumber = parseFloat(kmValue);
-        if (!isNaN(kmNumber) && kmNumber >= 0) {
-          console.log('Speichere Kilometerstand:', kmNumber);
-          await updateKilometerstand(transactionId, kmNumber);
-        }
-      }
-      
-      // Speichere Liter wenn vorhanden
-      if (literInput && literInput.trim() !== '') {
-        const literValue = literInput.replace(',', '.');
-        const literNumber = parseFloat(literValue);
-        if (!isNaN(literNumber) && literNumber >= 0) {
-          console.log('Speichere Liter:', literNumber);
-          await updateLiter(transactionId, literNumber);
-        }
-      }
-      
-      // Erfolgreich - lösche Input-Werte
-      setKmInputs(prev => {
-        const newInputs = { ...prev };
-        delete newInputs[transactionId];
-        return newInputs;
-      });
-      
-      setLiterInputs(prev => {
-        const newInputs = { ...prev };
-        delete newInputs[transactionId];
-        return newInputs;
-      });
-      
-      console.log('Tanken-Daten erfolgreich gespeichert');
-      
-      // Lade die Transaktionen des Monats neu
-      const transaction = months.flatMap(m => m.transactions || []).find(t => t.id === transactionId);
-      if (transaction) {
-        const transactionDate = new Date(transaction.date);
-        await loadTransactionsForMonth(transactionDate.getFullYear(), transactionDate.getMonth() + 1);
-      }
-      
-    } catch (error) {
-      console.error('Fehler beim Speichern der Tanken-Daten:', error);
-      alert('Fehler beim Speichern der Daten. Bitte versuchen Sie es erneut.');
-    } finally {
-      setSavingStates(prev => ({ ...prev, [transactionId]: false }));
-    }
+  // Prüft ob eine Transaktion eine H+M-Transaktion ist
+  const isHMTransaction = (description: string): boolean => {
+    return description.startsWith('H+') || description.startsWith('M+');
   };
 
   // Such-Handler
@@ -400,12 +308,17 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // Transaktionen filtern
   const filterTransactions = (transactions: Transaction[]): Transaction[] => {
+    // Erst H+M Transaktionen herausfiltern
+    const nonHMTransactions = transactions.filter(transaction => 
+      !isHMTransaction(transaction.description)
+    );
+    
     if (!activeSearchTerm.trim() || searchTerm !== activeSearchTerm) {
-      return transactions;
+      return nonHMTransactions;
     }
     
     const searchLower = activeSearchTerm.toLowerCase();
-    return transactions.filter(transaction => {
+    return nonHMTransactions.filter(transaction => {
       const matchesDescription = transaction.description.toLowerCase().includes(searchLower);
       const matchesLocation = transaction.location.toLowerCase().includes(searchLower);
       const matchesAmount = transaction.amount.toString().includes(activeSearchTerm) ||
@@ -449,12 +362,14 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Loading-Zustand
   if (isInitialLoading) {
     return (
-      <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-semibold text-white mb-4">Transaktionen</h2>
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-            <span className="ml-3 text-slate-400">Lade Monate...</span>
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-semibold text-white mb-4">Transaktionen</h2>
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <span className="ml-3 text-slate-400">Lade Monate...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -464,10 +379,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Leerer Zustand
   if (months.length === 0) {
     return (
-      <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-semibold text-white mb-4">Transaktionen</h2>
-          <p className="text-slate-400">Noch keine Transaktionen vorhanden.</p>
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-semibold text-white mb-4">Transaktionen</h2>
+            <p className="text-slate-400">Noch keine Transaktionen vorhanden.</p>
+          </div>
         </div>
       </div>
     );
@@ -475,11 +392,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // Haupt-Render
   return (
-    <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-4 sm:p-8 shadow-2xl mt-4 sm:mt-8">
-      <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+    <div className="max-w-4xl mx-auto px-4">
+      <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-3 sm:p-4 shadow-2xl mt-4 sm:mt-8">
+      <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
           {/* Title and Year Selection - direkt nebeneinander */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <h2 className="text-xl sm:text-2xl font-semibold text-white">Transaktionen</h2>
             
             {/* Jahresauswahl als Dropdown - direkt neben dem Titel */}
@@ -500,7 +418,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
         </div>
         
         {/* Suchfeld - Mobile optimiert */}
-        <div className="relative w-full sm:w-80">
+        <div className="relative w-full sm:w-64">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -541,13 +459,13 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
         </div>
       </div>
       
-      <div className="space-y-8">
+      <div className="space-y-4">
         {months.map((monthData) => (
           <div key={`${monthData.year}-${monthData.month}`}>
             {/* Monats-Header */}
             <button
               onClick={() => toggleMonth(monthData.year, monthData.month)}
-              className="w-full text-left mb-4 border-b border-slate-600/30 pb-2 hover:border-slate-500/50 transition-colors"
+              className="w-full text-left mb-2 border-b border-slate-600/30 pb-1 hover:border-slate-500/50 transition-colors"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-slate-300">
@@ -587,7 +505,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             
             {/* Transaktionen des Monats */}
             {monthData.isExpanded && (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {(monthData.isLoading || (activeSearchTerm.trim() && searchTerm === activeSearchTerm && !monthData.transactions && searchLoadingMonths.has(`${monthData.year}-${monthData.month}`))) && (
                   <div className="text-center py-8">
                     <div className="flex items-center justify-center">
@@ -619,13 +537,28 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                         return (
                           <div
                             key={transaction.id}
-                            className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-3 sm:p-4 hover:bg-slate-800/50 transition-all"
+                            className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-2 sm:p-3 hover:bg-slate-800/50 transition-all"
                           >
                             <div className="flex items-start sm:items-center">
                               <div className="flex-1 min-w-0">
                                 <div>
-                                  <h3 className="text-white font-medium text-sm md:text-base break-words">
+                                  <h3 className="text-white font-medium text-sm md:text-base break-words flex items-center gap-1">
                                     {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                                    {/* Kilometerstand und Liter-Anzeige für Tanken-Transaktionen */}
+                                    {isTanken && (transaction.kilometerstand || transaction.liter) && (
+                                      <div className="flex items-center gap-1">
+                                        {transaction.kilometerstand && (
+                                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                            {transaction.kilometerstand.toLocaleString('de-DE')} km
+                                          </span>
+                                        )}
+                                        {transaction.liter && (
+                                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                                            {transaction.liter.toString().replace('.', ',')} L
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
                                   </h3>
                                   <span className="text-xs text-slate-500 mt-1 block">
                                     {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
@@ -633,40 +566,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                                 </div>
                               </div>
                               
-                              {isTanken && (
-                                <div className="hidden sm:flex items-center space-x-2 mr-12">
-                                  <input
-                                    type="text"
-                                    placeholder="km"
-                                    value={getKilometerDisplayValue(transaction)}
-                                    onChange={(e) => handleKilometerInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-24 px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">km</span>
-                                  <input
-                                    type="text"
-                                    placeholder="Liter"
-                                    value={getLiterDisplayValue(transaction)}
-                                    onChange={(e) => handleLiterInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-24 px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">Liter</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSaveTankenData(transaction.id);
-                                    }}
-                                    disabled={savingStates[transaction.id]}
-                                    className="px-2 py-1 text-xs bg-slate-600/50 hover:bg-slate-500/50 disabled:bg-slate-600/30 text-slate-300 hover:text-white border border-slate-500/30 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                  >
-                                    {savingStates[transaction.id] ? 'Speichert...' : 'Speichern'}
-                                  </button>
-                                </div>
-                              )}
-                              
-                              <div className="text-right ml-2 sm:ml-0">
+                              <div className="text-right ml-1 sm:ml-2">
                                 <div className={`text-sm sm:text-base md:text-lg font-semibold ${
                                   transaction.type === 'income' 
                                     ? 'text-green-400' 
@@ -719,42 +619,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                                 </div>
                               )}
                             </div>
-                            
-                            {/* Mobile Tanken-Eingaben */}
-                            {isTanken && (
-                              <div className="sm:hidden mt-3 pt-3 border-t border-slate-600/30">
-                                <div className="flex items-center space-x-2">
-                                  <input
-                                    type="text"
-                                    placeholder="km"
-                                    value={getKilometerDisplayValue(transaction)}
-                                    onChange={(e) => handleKilometerInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-20 px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">km</span>
-                                  <input
-                                    type="text"
-                                    placeholder="L"
-                                    value={getLiterDisplayValue(transaction)}
-                                    onChange={(e) => handleLiterInput(transaction.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-16 px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/30 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-right"
-                                  />
-                                  <span className="text-xs text-slate-400">L</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSaveTankenData(transaction.id);
-                                    }}
-                                    disabled={savingStates[transaction.id]}
-                                    className="px-4 py-2 text-sm bg-slate-600/50 hover:bg-slate-500/50 disabled:bg-slate-600/30 text-slate-300 hover:text-white border border-slate-500/30 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                  >
-                                    {savingStates[transaction.id] ? '...' : 'Speichern'}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       });
@@ -765,10 +629,10 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                       (() => {
                         const balance = calculateMonthBalance(monthData.transactions);
                         return (
-                          <div className="mt-4 pt-4 border-t border-slate-600/30">
-                            <div className="bg-slate-700/30 rounded-lg p-3 sm:p-4">
-                              <h4 className="text-white font-medium text-sm mb-3">Monatsbilanz</h4>
-                              <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div className="mt-3 pt-3 border-t border-slate-600/30">
+                            <div className="bg-slate-700/30 rounded-lg p-2 sm:p-3">
+                              <h4 className="text-white font-medium text-sm mb-2">Monatsbilanz</h4>
+                              <div className="grid grid-cols-3 gap-3 text-sm">
                                 <div className="text-center">
                                   <div className="text-green-400 font-semibold">
                                     +{formatAmount(Math.abs(balance.income))}
@@ -806,6 +670,72 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </div>
         ))}
       </div>
+      
+      {/* Bilanzen, Geplante Ausgaben und H+M Buttons am Ende */}
+      <div className="mt-6 pt-4 border-t border-slate-600/30">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Link 
+            to="/bilanzen"
+            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <svg 
+              className="w-5 h-5 mr-2" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" 
+              />
+            </svg>
+            Bilanzen
+          </Link>
+          
+          <Link 
+            to="/geplant"
+            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <svg 
+              className="w-5 h-5 mr-2" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4h3a1 1 0 011 1v9a2 2 0 01-2 2H5a2 2 0 01-2-2V8a1 1 0 011-1h3z" 
+              />
+            </svg>
+            Geplante Ausgaben
+          </Link>
+          
+          <Link 
+            to="/hm"
+            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <svg 
+              className="w-5 h-5 mr-2" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M13 10V3L4 14h7v7l9-11h-7z" 
+              />
+            </svg>
+            H+M
+          </Link>
+        </div>
+      </div>
+    </div>
     </div>
   );
 });

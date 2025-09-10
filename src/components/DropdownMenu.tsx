@@ -46,7 +46,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({ items, trigger }) =>
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800/95 backdrop-blur-lg border border-slate-600/50 rounded-lg shadow-2xl z-50 py-1">
+        <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800/95 backdrop-blur-lg border border-slate-600/50 rounded-lg shadow-2xl z-[9999] py-1">
           {items.map((item, index) => (
             <button
               key={index}

@@ -1,10 +1,10 @@
 import './styles.css';
 import { useState, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
-import { TankenPage } from './components/TankenPage';
 import { BilanzPage } from './components/BilanzPage';
 import { PlannedExpensesPage } from './components/PlannedExpensesPage';
+import { HMPage } from './components/HMPage';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
@@ -354,60 +354,43 @@ function HomePage() {
   );
 }
 
+const AppLayout = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const isHMPage = location.pathname === '/hm';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* Global Header mit Navigation - nur anzeigen wenn nicht auf H+M Seite */}
+      {!isHMPage && (
+        <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8">
+          <div className="text-center mb-6 sm:mb-8">
+            <Link 
+              to="/" 
+              className="inline-block text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent mb-2 sm:mb-3 tracking-tight hover:from-blue-300 hover:via-purple-400 hover:to-cyan-300 transition-all duration-200"
+            >
+              Cashflow
+            </Link>
+            <div className="w-12 sm:w-16 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-4 sm:mb-6 opacity-60"></div>
+          </div>
+        </div>
+      )}
+      
+      {children}
+    </div>
+  );
+};
+
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        {/* Global Header mit Navigation - Mobile Optimiert */}
-        <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8">
-          <div className="text-center mb-6 sm:mb-12">
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent mb-2 sm:mb-4 tracking-tight">
-              Cashflow
-            </h1>
-            <div className="w-16 sm:w-20 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-4 sm:mb-6 opacity-60"></div>
-            
-            {/* Navigation - Mobile optimiert */}
-            <div className="flex justify-center space-x-2 sm:space-x-4 mb-4 sm:mb-6">
-              <Link 
-                to="/" 
-                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
-              >
-                Übersicht
-              </Link>
-              <Link 
-                to="/bilanzen" 
-                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
-              >
-                Bilanzen
-              </Link>
-              <Link 
-                to="/tanken" 
-                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
-              >
-                Tankübersicht
-              </Link>
-              <Link 
-                to="/geplant" 
-                className="text-slate-300 hover:text-white transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-white/10 text-xs sm:text-sm"
-              >
-                Geplante Ausgaben
-              </Link>
-            </div>
-            
-            <p className="text-slate-400 text-base sm:text-lg font-light">
-              Professionelle Finanzübersicht
-            </p>
-          </div>
-        </div>
-        
-        {/* Page Content */}
+      <AppLayout>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/bilanzen" element={<BilanzPage />} />
-          <Route path="/tanken" element={<TankenPage />} />
           <Route path="/geplant" element={<PlannedExpensesPage />} />
+          <Route path="/hm" element={<HMPage />} />
         </Routes>
-      </div>
+      </AppLayout>
     </Router>
   );
 }
