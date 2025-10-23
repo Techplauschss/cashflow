@@ -32,6 +32,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [searchLoadingMonths, setSearchLoadingMonths] = useState<Set<string>>(new Set());
+  const [showOnlyBusiness, setShowOnlyBusiness] = useState(false);
 
   // Aktuelles Datum für Filter
   const currentDate = new Date();
@@ -49,11 +50,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     return year === currentYear && month === currentMonth;
   };
 
-  // Berechnet die Bilanz für einen Monat
+  // Berechnet die Bilanz für einen Monat (bereits gefilterte Transaktionen)
   const calculateMonthBalance = (transactions: Transaction[]) => {
     let income = 0;
     let expenses = 0;
     
+    // Transaktionen sind bereits gefiltert durch filterTransactions()
     transactions.forEach(transaction => {
       const absoluteAmount = Math.abs(transaction.amount);
       if (transaction.type === 'income') {
@@ -241,45 +243,25 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     }
   };
 
-  // Transaktionen sortieren
-  const sortTransactionsByAmount = (transactions: Transaction[]): Transaction[] => {
-    return [...transactions].sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === 'expense' ? -1 : 1;
-      }
-      
-      const amountA = Number(a.amount);
-      const amountB = Number(b.amount);
-      
-      if (a.type === 'expense') {
-        return amountA - amountB;
-      } else {
-        return amountB - amountA;
-      }
+  // Separiert und sortiert Transaktionen nach Typ (Ausgaben oben, Einnahmen unten)
+  const sortAndSeparateTransactions = (transactions: Transaction[]): { expenses: Transaction[], incomes: Transaction[] } => {
+    const expenses = transactions.filter(t => t.type === 'expense');
+    const incomes = transactions.filter(t => t.type === 'income');
+    
+    // Sortiere beide Gruppen nach Betragshöhe (größte zuerst)
+    const sortedExpenses = [...expenses].sort((a, b) => {
+      const amountA = Math.abs(Number(a.amount));
+      const amountB = Math.abs(Number(b.amount));
+      return amountB - amountA;
     });
-  };
-
-  // Neue Funktion: Sortiert Transaktionen basierend auf dem Monat
-  const sortTransactions = (transactions: Transaction[], year: number, month: number): Transaction[] => {
-    // Prüfe ob es der aktuelle Monat ist
-    if (isCurrentMonth(year, month)) {
-      // Für den aktuellen Monat: Ausgaben oben (nach Betrag), dann Einnahmen unten (nach Betrag)
-      return [...transactions].sort((a, b) => {
-        // 1. Zuerst nach Typ sortieren (Ausgaben vor Einnahmen)
-        if (a.type !== b.type) {
-          return a.type === 'expense' ? -1 : 1; // expense (-1) kommt vor income (1)
-        }
-        
-        // 2. Innerhalb des gleichen Typs nach Betrag sortieren (größte zuerst)
-        const amountA = Math.abs(Number(a.amount));
-        const amountB = Math.abs(Number(b.amount));
-        
-        return amountB - amountA; // Größte Beträge zuerst
-      });
-    } else {
-      // Für alle anderen Monate: Bestehende Sortierung nach Betrag
-      return sortTransactionsByAmount(transactions);
-    }
+    
+    const sortedIncomes = [...incomes].sort((a, b) => {
+      const amountA = Math.abs(Number(a.amount));
+      const amountB = Math.abs(Number(b.amount));
+      return amountB - amountA;
+    });
+    
+    return { expenses: sortedExpenses, incomes: sortedIncomes };
   };
 
   // Suchbegriff hervorheben
@@ -309,16 +291,25 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Transaktionen filtern
   const filterTransactions = (transactions: Transaction[]): Transaction[] => {
     // Erst H+M Transaktionen herausfiltern
-    const nonHMTransactions = transactions.filter(transaction => 
+    let filtered = transactions.filter(transaction => 
       !isHMTransaction(transaction.description)
     );
     
+    // Business-Filter anwenden - standardmäßig Business-Transaktionen ausblenden
+    if (showOnlyBusiness) {
+      // Wenn Business-Toggle aktiviert ist, nur Business-Transaktionen zeigen
+      filtered = filtered.filter(transaction => transaction.isBusiness === true);
+    } else {
+      // Standardmäßig Business-Transaktionen ausblenden (nur in normaler Ansicht)
+      filtered = filtered.filter(transaction => transaction.isBusiness !== true);
+    }
+    
     if (!activeSearchTerm.trim() || searchTerm !== activeSearchTerm) {
-      return nonHMTransactions;
+      return filtered;
     }
     
     const searchLower = activeSearchTerm.toLowerCase();
-    return nonHMTransactions.filter(transaction => {
+    return filtered.filter(transaction => {
       const matchesDescription = transaction.description.toLowerCase().includes(searchLower);
       const matchesLocation = transaction.location.toLowerCase().includes(searchLower);
       const matchesAmount = transaction.amount.toString().includes(activeSearchTerm) ||
@@ -417,7 +408,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </div>
         </div>
         
-        {/* Suchfeld - Mobile optimiert */}
+        {/* Suchfeld mit integriertem Business-Toggle */}
         <div className="relative w-full sm:w-64">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -430,32 +421,50 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="block w-full pl-10 pr-10 py-2 sm:py-2 border border-slate-600/30 rounded-lg bg-slate-800/50 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            className="block w-full pl-10 pr-20 py-2 sm:py-2 border border-slate-600/30 rounded-lg bg-slate-800/50 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           />
-          {searchTerm && (
+          
+          {/* Business Toggle Switch und X-Button im Suchfeld */}
+          <div className="absolute inset-y-0 right-0 pr-3 flex items-center space-x-2">
+            {searchTerm && (
+              <button
+                onClick={() => {
+                  handleSearchChange('');
+                  setActiveSearchTerm('');
+                  const currentDate = new Date();
+                  const currentMonthYear = currentDate.toLocaleDateString('de-DE', {
+                    month: 'long',
+                    year: 'numeric',
+                  });
+                  // Nur Monate des ausgewählten Jahres berücksichtigen
+                  setMonths(prev => prev.map(month => ({
+                    ...month,
+                    isExpanded: month.monthYear === currentMonthYear && month.year === selectedYear
+                  })));
+                }}
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Suche löschen"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
             <button
-              onClick={() => {
-                handleSearchChange('');
-                setActiveSearchTerm('');
-                const currentDate = new Date();
-                const currentMonthYear = currentDate.toLocaleDateString('de-DE', {
-                  month: 'long',
-                  year: 'numeric',
-                });
-                // Nur Monate des ausgewählten Jahres berücksichtigen
-                setMonths(prev => prev.map(month => ({
-                  ...month,
-                  isExpanded: month.monthYear === currentMonthYear && month.year === selectedYear
-                })));
-              }}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors"
-              title="Suche löschen"
+              type="button"
+              onClick={() => setShowOnlyBusiness(!showOnlyBusiness)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                showOnlyBusiness ? 'bg-blue-600' : 'bg-slate-600'
+              }`}
+              title={showOnlyBusiness ? "Alle Transaktionen anzeigen" : "Nur Geschäftstransaktionen anzeigen"}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <span
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 ${
+                  showOnlyBusiness ? 'translate-x-5' : 'translate-x-1'
+                }`}
+              />
             </button>
-          )}
+          </div>
         </div>
       </div>
       
@@ -472,11 +481,29 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                   {getMonthName(monthData)}
                   <span className="ml-2 text-sm text-slate-500">
                     ({(() => {
-                      if (!monthData.transactions) return monthData.count;
+                      if (!monthData.transactions) {
+                        return showOnlyBusiness ? '...' : monthData.count;
+                      }
+                      
                       const filteredCount = filterTransactions(monthData.transactions).length;
+                      
+                      // Berechne die Gesamtzahl basierend auf Business-Filter
+                      let totalCount = monthData.count;
+                      if (showOnlyBusiness) {
+                        // Zähle nur Business-Transaktionen (ohne H+M Filter)
+                        totalCount = monthData.transactions.filter(t => 
+                          !isHMTransaction(t.description) && t.isBusiness === true
+                        ).length;
+                      } else {
+                        // Zähle alle Transaktionen ohne H+M
+                        totalCount = monthData.transactions.filter(t => 
+                          !isHMTransaction(t.description)
+                        ).length;
+                      }
+                      
                       return (activeSearchTerm.trim() && searchTerm === activeSearchTerm)
-                        ? `${filteredCount} von ${monthData.count}` 
-                        : monthData.count;
+                        ? `${filteredCount} von ${totalCount}` 
+                        : totalCount;
                     })()} Transaktionen)
                   </span>
                 </h3>
@@ -521,17 +548,25 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                   <>
                     {(() => {
                       const filteredTransactions = filterTransactions(monthData.transactions);
-                      const sortedTransactions = sortTransactions(filteredTransactions, monthData.year, monthData.month);
+                      const { expenses, incomes } = sortAndSeparateTransactions(filteredTransactions);
                       
-                      if (filteredTransactions.length === 0 && activeSearchTerm.trim() && searchTerm === activeSearchTerm) {
-                        return (
-                          <div className="text-center py-4 text-slate-400">
-                            Keine Transaktionen gefunden für "{activeSearchTerm}".
-                          </div>
-                        );
+                      if (filteredTransactions.length === 0) {
+                        if (activeSearchTerm.trim() && searchTerm === activeSearchTerm) {
+                          return (
+                            <div className="text-center py-4 text-slate-400">
+                              Keine {showOnlyBusiness ? 'Geschäfts-' : ''}Transaktionen gefunden für "{activeSearchTerm}".
+                            </div>
+                          );
+                        } else if (showOnlyBusiness) {
+                          return (
+                            <div className="text-center py-4 text-slate-400">
+                              Keine Geschäftstransaktionen in diesem Monat.
+                            </div>
+                          );
+                        }
                       }
                       
-                      return sortedTransactions.map((transaction) => {
+                      const renderTransaction = (transaction: Transaction) => {
                         const isTanken = isTankenTransaction(transaction.description, transaction.type);
                         
                         return (
@@ -544,6 +579,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                                 <div>
                                   <h3 className="text-white font-medium text-sm md:text-base break-words flex items-center gap-1">
                                     {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                                    {/* Business-Indikator */}
+                                    {transaction.isBusiness && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                                        B
+                                      </span>
+                                    )}
                                     {/* Kilometerstand und Liter-Anzeige für Tanken-Transaktionen */}
                                     {isTanken && (transaction.kilometerstand || transaction.liter) && (
                                       <div className="flex items-center gap-1">
@@ -621,13 +662,38 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                             </div>
                           </div>
                         );
-                      });
+                      };
+                      
+                      return (
+                        <div className="space-y-6">
+                          {/* Ausgaben Sektion */}
+                          {expenses.length > 0 && (
+                            <div>
+                              <div className="space-y-2">
+                                {expenses.map(renderTransaction)}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Einnahmen Sektion */}
+                          {incomes.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-medium text-green-300 mb-3 border-b border-green-400/20 pb-2">
+                              </h4>
+                              <div className="space-y-2">
+                                {incomes.map(renderTransaction)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
                     })()}
                     
                     {/* Monatsbilanz - nur anzeigen wenn Transaktionen vorhanden und NICHT der aktuelle Monat */}
                     {monthData.transactions && monthData.transactions.length > 0 && !activeSearchTerm.trim() && !isCurrentMonth(monthData.year, monthData.month) && (
                       (() => {
-                        const balance = calculateMonthBalance(monthData.transactions);
+                        const filteredTransactionsForBalance = filterTransactions(monthData.transactions);
+                        const balance = calculateMonthBalance(filteredTransactionsForBalance);
                         return (
                           <div className="mt-3 pt-3 border-t border-slate-600/30">
                             <div className="bg-slate-700/30 rounded-lg p-2 sm:p-3">
@@ -662,7 +728,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             
             {monthData.transactions && monthData.transactions.length === 0 && !monthData.isLoading && (
                   <div className="text-center py-4 text-slate-400">
-                    Keine Transaktionen in diesem Monat gefunden.
+                    Keine {showOnlyBusiness ? 'Geschäfts-' : ''}Transaktionen in diesem Monat gefunden.
                   </div>
                 )}
               </div>
@@ -671,9 +737,9 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
         ))}
       </div>
       
-      {/* Bilanzen, Geplante Ausgaben und H+M Buttons am Ende */}
+      {/* Bilanzen, Geplante Ausgaben, Business und H+M Buttons am Ende */}
       <div className="mt-6 pt-4 border-t border-slate-600/30">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Link 
             to="/bilanzen"
             className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900"
@@ -712,6 +778,26 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
               />
             </svg>
             Geplante Ausgaben
+          </Link>
+          
+          <Link 
+            to="/business"
+            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <svg 
+              className="w-5 h-5 mr-2" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" 
+              />
+            </svg>
+            🏢 Business
           </Link>
           
           <Link 

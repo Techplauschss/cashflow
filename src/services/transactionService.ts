@@ -17,6 +17,7 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     date: new Date().toISOString().split('T')[0], // Immer aktuelles Datum für normale Transaktionen
     timestamp: Date.now(),
     isPlanned: false, // Normale Transaktionen sind nicht geplant
+    isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
   };
 
   try {
@@ -190,6 +191,7 @@ export const updateTransaction = async (
     location: string;
     type: 'income' | 'expense';
     date: string;
+    isBusiness?: boolean;
   }
 ): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
@@ -201,6 +203,7 @@ export const updateTransaction = async (
       location: updatedData.location,
       type: updatedData.type,
       date: updatedData.date,
+      isBusiness: updatedData.isBusiness || false,
       // Aktualisiere auch den Timestamp für die Sortierung
       lastModified: Date.now()
     });
@@ -227,6 +230,7 @@ export const addPlannedTransaction = async (transactionData: TransactionFormData
     date: transactionData.date || new Date().toISOString().split('T')[0], // Verwende das übergebene Datum oder heute
     timestamp: Date.now(),
     isPlanned: true,
+    isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
   };
 
   try {
@@ -312,4 +316,30 @@ export const convertPlannedToRealTransaction = async (plannedTransactionId: stri
     console.error('Error converting planned transaction:', error);
     throw new Error('Fehler beim Konvertieren der geplanten Transaktion');
   }
+};
+
+// Funktion zum Abrufen aller Transaktionen (nicht geplante)
+export const getAllTransactions = async (): Promise<Transaction[]> => {
+  const transactionsRef = ref(database, 'transactions');
+  
+  return new Promise((resolve, reject) => {
+    onValue(transactionsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const transactions: Transaction[] = Object.entries(data)
+          .map(([id, transaction]) => ({
+            id,
+            ...(transaction as Omit<Transaction, 'id'>),
+          }))
+          .filter(transaction => !transaction.isPlanned) // Filtere geplante Transaktionen aus
+          .sort((a, b) => b.timestamp - a.timestamp); // Sortiere nach Timestamp, neueste zuerst
+        resolve(transactions);
+      } else {
+        resolve([]);
+      }
+    }, (error) => {
+      console.error('Error fetching all transactions:', error);
+      reject(error);
+    }, { onlyOnce: true });
+  });
 };

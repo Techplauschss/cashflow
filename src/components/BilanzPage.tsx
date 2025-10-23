@@ -14,9 +14,10 @@ interface MonthBalance {
 
 export const BilanzPage = () => {
   const [monthBalances, setMonthBalances] = useState<MonthBalance[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showOnlyBusiness, setShowOnlyBusiness] = useState(false);
 
   // Aktuelles Datum für Filter
   const currentDate = new Date();
@@ -31,12 +32,31 @@ export const BilanzPage = () => {
     });
   };
 
+  // Prüft ob eine Transaktion eine H+M-Transaktion ist
+  const isHMTransaction = (description: string): boolean => {
+    return description.startsWith('H+') || description.startsWith('M+');
+  };
+
   // Berechnet die Bilanz für Transaktionen
   const calculateBalance = (transactions: Transaction[]) => {
     let income = 0;
     let expenses = 0;
     
-    transactions.forEach(transaction => {
+    // Erst H+M Transaktionen herausfiltern
+    let filteredTransactions = transactions.filter(transaction => 
+      !isHMTransaction(transaction.description)
+    );
+    
+    // Business-Filter anwenden
+    if (showOnlyBusiness) {
+      // Wenn Business-Toggle aktiviert ist, nur Business-Transaktionen zeigen
+      filteredTransactions = filteredTransactions.filter(transaction => transaction.isBusiness === true);
+    } else {
+      // Standardmäßig Business-Transaktionen ausblenden (nur private Transaktionen)
+      filteredTransactions = filteredTransactions.filter(transaction => transaction.isBusiness !== true);
+    }
+    
+    filteredTransactions.forEach(transaction => {
       const absoluteAmount = Math.abs(transaction.amount);
       if (transaction.type === 'income') {
         income += absoluteAmount;
@@ -98,10 +118,12 @@ export const BilanzPage = () => {
 
   useEffect(() => {
     loadBalances();
-  }, []);
+  }, [showOnlyBusiness]); // Lade Daten neu, wenn sich der Business-Filter ändert
 
   // Filtert Bilanzen nach ausgewähltem Jahr
-  const filteredBalances = monthBalances.filter(balance => balance.year === selectedYear);
+  const filteredBalances = selectedYear === 'all' 
+    ? monthBalances 
+    : monthBalances.filter(balance => balance.year === selectedYear);
 
   // Berechnet Jahresgesamtwerte
   const yearTotal = filteredBalances.reduce((acc, balance) => ({
@@ -164,18 +186,19 @@ export const BilanzPage = () => {
     <div className="flex items-center justify-center px-3 sm:px-4 pb-4 sm:pb-8">
       <div className="w-full max-w-4xl">
         <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-4 sm:p-8 shadow-2xl">
-          {/* Header mit Jahresauswahl */}
+          {/* Header mit Jahresauswahl und Business-Filter */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
               <h2 className="text-xl sm:text-2xl font-semibold text-white">Bilanzen</h2>
               
               {/* Jahresauswahl */}
-              {availableYears.length > 1 && (
+              {availableYears.length > 0 && (
                 <select
                   value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  onChange={(e) => setSelectedYear(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
                   className="px-3 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
                 >
+                  <option value="all">Alle Transaktionen</option>
                   {availableYears.map(year => (
                     <option key={year} value={year}>
                       {year}
@@ -183,13 +206,34 @@ export const BilanzPage = () => {
                   ))}
                 </select>
               )}
+              
+              {/* Business Toggle Switch */}
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-slate-400 whitespace-nowrap">Business</span>
+                <button
+                  type="button"
+                  onClick={() => setShowOnlyBusiness(!showOnlyBusiness)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                    showOnlyBusiness ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                  title={showOnlyBusiness ? "Alle Transaktionen anzeigen" : "Nur Geschäftstransaktionen anzeigen"}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                      showOnlyBusiness ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Jahresübersicht */}
           {filteredBalances.length > 0 && (
             <div className="mb-6 sm:mb-8">
-              <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4">Jahresübersicht {selectedYear}</h3>
+              <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4">
+                {selectedYear === 'all' ? 'Gesamtübersicht aller Transaktionen' : `Jahresübersicht ${selectedYear}`}
+              </h3>
               <div className="bg-slate-700/30 rounded-lg p-3 sm:p-4 md:p-6">
                 <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
                   <div>
@@ -277,7 +321,9 @@ export const BilanzPage = () => {
               {/* Pie Chart - Jahresverteilung */}
               {pieData.length > 0 && (
                 <div className="bg-slate-700/30 rounded-lg p-3 sm:p-4 md:p-6">
-                  <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4">Jahresverteilung {selectedYear}</h3>
+                  <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4">
+                    {selectedYear === 'all' ? 'Gesamtverteilung' : `Jahresverteilung ${selectedYear}`}
+                  </h3>
                   <div className="flex flex-col items-center space-y-4 sm:space-y-0 sm:flex-row sm:items-center">
                     <div className="h-48 w-48 sm:h-64 sm:w-full sm:max-w-sm">
                       <ResponsiveContainer width="100%" height="100%">
@@ -384,7 +430,9 @@ export const BilanzPage = () => {
             </div>
           ) : (
             <div className="text-center py-6 sm:py-8">
-              <p className="text-slate-400 text-sm sm:text-base">Keine Daten für {selectedYear} verfügbar.</p>
+              <p className="text-slate-400 text-sm sm:text-base">
+                {selectedYear === 'all' ? 'Keine Transaktionen verfügbar.' : `Keine Daten für ${selectedYear} verfügbar.`}
+              </p>
             </div>
           )}
         </div>

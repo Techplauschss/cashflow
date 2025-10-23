@@ -10,6 +10,7 @@ interface EditTransactionModalProps {
     location: string;
     type: 'income' | 'expense';
     date: string;
+    isBusiness?: boolean;
   }) => void;
   onCancel: () => void;
 }
@@ -25,6 +26,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [date, setDate] = useState('');
+  const [isBusiness, setIsBusiness] = useState(false);
 
   useEffect(() => {
     if (transaction) {
@@ -33,6 +35,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setLocation(transaction.location);
       setType(transaction.type);
       setDate(transaction.date);
+      setIsBusiness(transaction.isBusiness || false);
     }
   }, [transaction]);
 
@@ -97,7 +100,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       amount: numericAmount,
       location: location.trim() || 'Unbekannt',
       type,
-      date
+      date,
+      isBusiness
     });
   };
 
@@ -197,6 +201,25 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="z.B. Supermarkt, Online..."
               />
+            </div>
+
+            {/* Business Toggle */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Transaktionstyp
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsBusiness(!isBusiness)}
+                className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  isBusiness
+                    ? 'bg-blue-600 text-white border border-blue-500'
+                    : 'bg-slate-700/50 text-slate-300 border border-slate-600/30 hover:bg-slate-600/50'
+                }`}
+              >
+                <span className="font-bold">B</span>
+                <span>{isBusiness ? 'Geschäftstransaktion' : 'Private Transaktion'}</span>
+              </button>
             </div>
 
             {/* Date */}

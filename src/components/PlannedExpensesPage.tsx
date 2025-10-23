@@ -13,6 +13,7 @@ export const PlannedExpensesPage = () => {
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
   const [plannedDate, setPlannedDate] = useState('');
+  const [isBusiness, setIsBusiness] = useState(false);
   
   // Modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -107,7 +108,8 @@ export const PlannedExpensesPage = () => {
         description: description,
         location: location,
         date: plannedDate,
-        isPlanned: true
+        isPlanned: true,
+        isBusiness: isBusiness
       };
 
       await addPlannedTransaction(transactionData);
@@ -117,6 +119,7 @@ export const PlannedExpensesPage = () => {
       setAmount('');
       setLocation('');
       setPlannedDate('');
+      setIsBusiness(false);
       
       // Reload planned transactions
       await loadPlannedTransactions();
@@ -271,6 +274,25 @@ export const PlannedExpensesPage = () => {
                 </div>
               </div>
               
+              {/* Business Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Transaktionstyp
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsBusiness(!isBusiness)}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    isBusiness
+                      ? 'bg-blue-600 text-white border border-blue-500'
+                      : 'bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:bg-slate-600/50'
+                  }`}
+                >
+                  <span className="font-bold">B</span>
+                  <span>{isBusiness ? 'Geschäftsausgabe' : 'Private Ausgabe'}</span>
+                </button>
+              </div>
+              
               <button
                 type="submit"
                 disabled={isAddingTransaction}
@@ -314,6 +336,11 @@ export const PlannedExpensesPage = () => {
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20">
                               Geplant
                             </span>
+                            {transaction.isBusiness && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                                B
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-slate-400">
                             {transaction.location} • {new Date(transaction.date).toLocaleDateString('de-DE')}

@@ -92,10 +92,16 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
       
       <div className="space-y-8">
         {groupedTransactions.map(([monthYear, monthTransactions]) => {
-          // Sortiere Transaktionen innerhalb des Monats nach Datum (neueste zuerst)
-          const sortedMonthTransactions = [...monthTransactions].sort((a, b) => {
-            return new Date(b.date).getTime() - new Date(a.date).getTime();
-          });
+          // Filtere Business-Transaktionen aus (diese werden nur in Business-Übersicht angezeigt)
+          const nonBusinessTransactions = monthTransactions.filter(transaction => transaction.isBusiness !== true);
+          
+          // Separiere Ausgaben und Einnahmen
+          const expenses = nonBusinessTransactions.filter(t => t.type === 'expense');
+          const incomes = nonBusinessTransactions.filter(t => t.type === 'income');
+          
+          // Sortiere Ausgaben und Einnahmen jeweils nach Betrag (größte Beträge zuerst)
+          const sortedExpenses = [...expenses].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+          const sortedIncomes = [...incomes].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
           
           return (
             <div key={monthYear}>
@@ -130,55 +136,126 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
               
               {/* Transaktionen des Monats - nur anzeigen wenn nicht eingeklappt */}
               {!isMonthCollapsed(monthYear) && (
-                <div className="space-y-3">
-                  {sortedMonthTransactions.map((transaction) => (
-                    <div
-                      key={transaction.id}
-                      className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 hover:bg-slate-800/50 transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-4">
-                            <div className="flex-1">
-                              <h3 className="text-white font-medium text-sm md:text-base">
-                                {transaction.description} • {transaction.location}
-                              </h3>
-                            </div>
-                            
-                            <div className="text-right">
-                              <div className={`text-base md:text-lg font-semibold ${
-                                transaction.type === 'income' 
-                                  ? 'text-green-400' 
-                                  : 'text-red-400'
-                              }`}>
-                                {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
+                <div className="space-y-6">
+                  {/* Ausgaben Sektion */}
+                  {sortedExpenses.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-red-300 mb-3 border-b border-red-400/20 pb-2">
+                        Ausgaben ({sortedExpenses.length})
+                      </h4>
+                      <div className="space-y-3">
+                        {sortedExpenses.map((transaction) => (
+                          <div
+                            key={transaction.id}
+                            className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 hover:bg-slate-800/50 transition-all"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-4">
+                                  <div className="flex-1">
+                                    <h3 className="text-white font-medium text-sm md:text-base flex items-center gap-2">
+                                      <span>{transaction.description} • {transaction.location}</span>
+                                      {transaction.isBusiness && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                                          B
+                                        </span>
+                                      )}
+                                    </h3>
+                                  </div>
+                                  
+                                  <div className="text-right">
+                                    <div className="text-base md:text-lg font-semibold text-red-400">
+                                      -{formatAmount(Math.abs(transaction.amount))}
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() => onDeleteTransaction(transaction.id)}
+                                    className="ml-4 p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all"
+                                    title="Transaktion löschen"
+                                  >
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
                               </div>
                             </div>
-
-                            <button
-                              onClick={() => onDeleteTransaction(transaction.id)}
-                              className="ml-4 p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all"
-                              title="Transaktion löschen"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                              </svg>
-                            </button>
                           </div>
-                        </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Einnahmen Sektion */}
+                  {sortedIncomes.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-green-300 mb-3 border-b border-green-400/20 pb-2">
+                        Einnahmen ({sortedIncomes.length})
+                      </h4>
+                      <div className="space-y-3">
+                        {sortedIncomes.map((transaction) => (
+                          <div
+                            key={transaction.id}
+                            className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 hover:bg-slate-800/50 transition-all"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-4">
+                                  <div className="flex-1">
+                                    <h3 className="text-white font-medium text-sm md:text-base flex items-center gap-2">
+                                      <span>{transaction.description} • {transaction.location}</span>
+                                      {transaction.isBusiness && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                                          B
+                                        </span>
+                                      )}
+                                    </h3>
+                                  </div>
+                                  
+                                  <div className="text-right">
+                                    <div className="text-base md:text-lg font-semibold text-green-400">
+                                      +{formatAmount(Math.abs(transaction.amount))}
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() => onDeleteTransaction(transaction.id)}
+                                    className="ml-4 p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all"
+                                    title="Transaktion löschen"
+                                  >
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

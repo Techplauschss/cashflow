@@ -9,6 +9,7 @@ export interface Transaction {
   kilometerstand?: number; // Optional: Kilometerstand für Tanken/Sprit-Transaktionen
   liter?: number; // Optional: Liter für Tanken/Sprit-Transaktionen
   isPlanned?: boolean; // Optional: Markiert geplante Ausgaben für die Zukunft
+  isBusiness?: boolean; // Optional: Markiert Geschäftstransaktionen
 }
 
 export interface TransactionFormData {
@@ -18,4 +19,5 @@ export interface TransactionFormData {
   location: string;
   date?: string; // Optional: für geplante Ausgaben
   isPlanned?: boolean; // Optional: für geplante Ausgaben
+  isBusiness?: boolean; // Optional: für Geschäftstransaktionen
 }

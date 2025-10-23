@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
 import { BilanzPage } from './components/BilanzPage';
 import { PlannedExpensesPage } from './components/PlannedExpensesPage';
+import { BusinessOverviewPage } from './components/BusinessOverviewPage';
 import { HMPage } from './components/HMPage';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
@@ -14,6 +15,7 @@ function HomePage() {
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'E' | 'A'>('A'); // E = Einnahme, A = Ausgabe
+  const [isBusiness, setIsBusiness] = useState(false); // B = Business/Geschäft
   const [isLoading, setIsLoading] = useState(false);
   const transactionListRef = useRef<LazyTransactionListRef>(null);
   
@@ -87,6 +89,7 @@ function HomePage() {
         amount: amount,
         description: description.trim(),
         location: location.trim() || 'Unbekannt',
+        isBusiness: isBusiness,
       });
 
       // Formular zurücksetzen
@@ -94,6 +97,7 @@ function HomePage() {
       setAmount('');
       setLocation('');
       setType('A');
+      setIsBusiness(false);
       
       // Aktualisiere die Transaktionsliste
       if (transactionListRef.current) {
@@ -207,7 +211,7 @@ function HomePage() {
 
               {/* Location and Type Row - Mobile - Kompakter */}
               <div className="grid grid-cols-5 gap-2">
-                <div className="col-span-3">
+                <div className="col-span-2">
                   <input
                     type="text"
                     id="location-mobile"
@@ -216,6 +220,18 @@ function HomePage() {
                     className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
                     placeholder="Ort"
                   />
+                </div>
+                <div className="col-span-1 flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsBusiness(!isBusiness)}
+                    className={`w-8 h-8 rounded-lg font-bold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isBusiness ? 'bg-blue-600 text-white' : 'bg-slate-600 text-slate-300'
+                    }`}
+                    title={isBusiness ? "Geschäftstransaktion" : "Private Transaktion"}
+                  >
+                    B
+                  </button>
                 </div>
                 <div className="col-span-2 flex items-center justify-center">
                   <button
@@ -237,7 +253,7 @@ function HomePage() {
 
             {/* Desktop Layout - Grid */}
             <div className="hidden sm:block">
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
                 {/* Amount Input */}
                 <div className="md:col-span-1">
                   <div className="relative">
@@ -276,6 +292,20 @@ function HomePage() {
                     className="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     placeholder="Ort"
                   />
+                </div>
+
+                {/* Business Button */}
+                <div className="md:col-span-1 flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsBusiness(!isBusiness)}
+                    className={`w-12 h-12 rounded-lg font-bold text-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                      isBusiness ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                    }`}
+                    title={isBusiness ? "Geschäftstransaktion" : "Private Transaktion"}
+                  >
+                    B
+                  </button>
                 </div>
 
                 {/* Type Switch */}
@@ -381,6 +411,65 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  // App-level states for modals
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [transactionToEdit, setTransactionToEdit] = useState<any>(null);
+
+  // App-level transaction handlers
+  const handleDeleteTransaction = async (transactionId: string) => {
+    setTransactionToDelete(transactionId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteTransaction = async () => {
+    if (!transactionToDelete) return;
+
+    try {
+      await deleteTransaction(transactionToDelete);
+      
+      // Refresh transaction list if available
+      window.location.reload(); // Simple refresh for now
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Fehler beim Löschen der Transaktion. Bitte versuchen Sie es erneut.');
+    } finally {
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+    }
+  };
+
+  const cancelDeleteTransaction = () => {
+    setShowDeleteModal(false);
+    setTransactionToDelete(null);
+  };
+
+  const handleEditTransaction = (transaction: any) => {
+    setTransactionToEdit(transaction);
+    setShowEditModal(true);
+  };
+
+  const saveEditTransaction = async (transactionId: string, updatedData: any) => {
+    try {
+      await updateTransaction(transactionId, updatedData);
+      
+      // Refresh transaction list if available
+      window.location.reload(); // Simple refresh for now
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      alert('Fehler beim Aktualisieren der Transaktion. Bitte versuchen Sie es erneut.');
+    } finally {
+      setShowEditModal(false);
+      setTransactionToEdit(null);
+    }
+  };
+
+  const cancelEditTransaction = () => {
+    setShowEditModal(false);
+    setTransactionToEdit(null);
+  };
+
   return (
     <Router>
       <AppLayout>
@@ -388,8 +477,33 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/bilanzen" element={<BilanzPage />} />
           <Route path="/geplant" element={<PlannedExpensesPage />} />
+          <Route path="/business" element={
+            <BusinessOverviewPage 
+              onDeleteTransaction={handleDeleteTransaction}
+              onEditTransaction={handleEditTransaction}
+            />
+          } />
           <Route path="/hm" element={<HMPage />} />
         </Routes>
+        
+        {/* Global Modals */}
+        <ConfirmModal
+          isOpen={showDeleteModal}
+          title="Transaktion löschen"
+          message="Sind Sie sicher, dass Sie diese Transaktion dauerhaft löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+          confirmText="Löschen"
+          cancelText="Abbrechen"
+          onConfirm={confirmDeleteTransaction}
+          onCancel={cancelDeleteTransaction}
+          isDestructive={true}
+        />
+
+        <EditTransactionModal
+          isOpen={showEditModal}
+          transaction={transactionToEdit}
+          onSave={saveEditTransaction}
+          onCancel={cancelEditTransaction}
+        />
       </AppLayout>
     </Router>
   );
