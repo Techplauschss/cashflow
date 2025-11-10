@@ -10,16 +10,9 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
+import type { Transaction } from './types/Transaction';
 
-interface Transaction {
-  id: string;
-  description: string;
-  amount: number;
-  location: string;
-  type: 'income' | 'expense';
-  date: string; // Or Date object
-  isBusiness: boolean;
-}
+
 
 const UI_MESSAGES = {
   ADD_ERROR: 'Fehler beim Hinzufügen der Transaktion. Bitte versuchen Sie es erneut.',
@@ -382,7 +375,10 @@ function App() {
   };
 
   const handleEditTransaction = (transaction: Transaction) => {
-    setTransactionToEdit(transaction);
+    setTransactionToEdit({
+      ...transaction,
+      timestamp: transaction.timestamp || Date.now(),
+    });
     setShowEditModal(true);
   };
 
@@ -424,6 +420,7 @@ function App() {
       await addTransaction({
         ...newTransactionData,
         amount: newTransactionData.amount.toString(),
+        isBusiness: newTransactionData.isBusiness ?? false,
       });
       window.location.reload(); // TODO: Replace with a more elegant state update
     } catch (error) {

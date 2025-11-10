@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import type { Transaction } from '../types/Transaction';
 
+type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean };
+
 interface AddTransactionModalProps {
   isOpen: boolean;
   prefilledData?: Partial<Transaction>;
-  onSave: (newTransactionData: Omit<Transaction, 'id'>) => void;
+  onSave: (newTransactionData: NewTransactionData) => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -94,7 +96,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       location: location.trim() || 'Unbekannt',
       type,
       date,
-      isBusiness
+      isBusiness,
+      timestamp: Date.now(),
     });
   };
 
