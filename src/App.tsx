@@ -8,9 +8,33 @@ import { BusinessOverviewPage } from './components/BusinessOverviewPage';
 import { HMPage } from './components/HMPage';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
+import { AddTransactionModal } from './components/AddTransactionModal';
 import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
 
-function HomePage() {
+interface Transaction {
+  id: string;
+  description: string;
+  amount: number;
+  location: string;
+  type: 'income' | 'expense';
+  date: string; // Or Date object
+  isBusiness: boolean;
+}
+
+const UI_MESSAGES = {
+  ADD_ERROR: 'Fehler beim Hinzufügen der Transaktion. Bitte versuchen Sie es erneut.',
+  UPDATE_ERROR: 'Fehler beim Aktualisieren der Transaktion. Bitte versuchen Sie es erneut.',
+  DELETE_ERROR: 'Fehler beim Löschen der Transaktion. Bitte versuchen Sie es erneut.',
+  REQUIRED_FIELDS: 'Bitte füllen Sie alle Pflichtfelder aus.',
+};
+
+function HomePage({
+  onDeleteTransaction,
+  onEditTransaction,
+}: {
+  onDeleteTransaction: (transactionId: string) => void;
+  onEditTransaction: (transaction: Transaction) => void;
+}) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
@@ -18,12 +42,6 @@ function HomePage() {
   const [isBusiness, setIsBusiness] = useState(false); // B = Business/Geschäft
   const [isLoading, setIsLoading] = useState(false);
   const transactionListRef = useRef<LazyTransactionListRef>(null);
-  
-  // Modal states
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [transactionToEdit, setTransactionToEdit] = useState<any>(null);
 
   const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Erlaubte Tasten: Zahlen (0-9), Komma, Punkt, Backspace, Delete, Tab, Enter, Pfeiltasten
@@ -77,7 +95,7 @@ function HomePage() {
     
     // Validierung
     if (!description.trim() || !amount.trim()) {
-      alert('Bitte füllen Sie alle Pflichtfelder aus.');
+      alert(UI_MESSAGES.REQUIRED_FIELDS);
       return;
     }
 
@@ -106,75 +124,10 @@ function HomePage() {
       
     } catch (error) {
       console.error('Error adding transaction:', error);
-      alert('Fehler beim Hinzufügen der Transaktion. Bitte versuchen Sie es erneut.');
+      alert(UI_MESSAGES.ADD_ERROR);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleDeleteTransaction = async (transactionId: string) => {
-    setTransactionToDelete(transactionId);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDeleteTransaction = async () => {
-    if (!transactionToDelete) return;
-
-    try {
-      await deleteTransaction(transactionToDelete);
-      
-      // Aktualisiere die Transaktionsliste
-      if (transactionListRef.current) {
-        transactionListRef.current.refreshData();
-      }
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
-      alert('Fehler beim Löschen der Transaktion. Bitte versuchen Sie es erneut.');
-    } finally {
-      setShowDeleteModal(false);
-      setTransactionToDelete(null);
-    }
-  };
-
-  const cancelDeleteTransaction = () => {
-    setShowDeleteModal(false);
-    setTransactionToDelete(null);
-  };
-
-  const handleEditTransaction = (transaction: any) => {
-    setTransactionToEdit(transaction);
-    setShowEditModal(true);
-  };
-
-  const saveEditTransaction = async (
-    transactionId: string, 
-    updatedData: {
-      description: string;
-      amount: number;
-      location: string;
-      type: 'income' | 'expense';
-      date: string;
-    }
-  ) => {
-    try {
-      await updateTransaction(transactionId, updatedData);
-      
-      // Aktualisiere die Transaktionsliste
-      if (transactionListRef.current) {
-        transactionListRef.current.refreshData();
-      }
-      
-      setShowEditModal(false);
-      setTransactionToEdit(null);
-    } catch (error) {
-      console.error('Error updating transaction:', error);
-      alert('Fehler beim Aktualisieren der Transaktion. Bitte versuchen Sie es erneut.');
-    }
-  };
-
-  const cancelEditTransaction = () => {
-    setShowEditModal(false);
-    setTransactionToEdit(null);
   };
 
   return (
@@ -349,8 +302,8 @@ function HomePage() {
         {/* Transaction List */}
         <LazyTransactionList 
           ref={transactionListRef} 
-          onDeleteTransaction={handleDeleteTransaction}
-          onEditTransaction={handleEditTransaction}
+          onDeleteTransaction={onDeleteTransaction}
+          onEditTransaction={onEditTransaction}
         />
 
         {/* Footer */}
@@ -360,26 +313,6 @@ function HomePage() {
           </p>
         </div>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={showDeleteModal}
-        title="Transaktion löschen"
-        message="Sind Sie sicher, dass Sie diese Transaktion dauerhaft löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
-        confirmText="Löschen"
-        cancelText="Abbrechen"
-        onConfirm={confirmDeleteTransaction}
-        onCancel={cancelDeleteTransaction}
-        isDestructive={true}
-      />
-
-      {/* Edit Transaction Modal */}
-      <EditTransactionModal
-        isOpen={showEditModal}
-        transaction={transactionToEdit}
-        onSave={saveEditTransaction}
-        onCancel={cancelEditTransaction}
-      />
     </div>
   );
 }
@@ -415,7 +348,10 @@ function App() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [transactionToEdit, setTransactionToEdit] = useState<any>(null);
+  const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTransactionProps, setNewTransactionProps] = useState<Partial<Transaction>>({});
+
 
   // App-level transaction handlers
   const handleDeleteTransaction = async (transactionId: string) => {
@@ -430,10 +366,10 @@ function App() {
       await deleteTransaction(transactionToDelete);
       
       // Refresh transaction list if available
-      window.location.reload(); // Simple refresh for now
+      window.location.reload(); // TODO: Replace with a more elegant state update
     } catch (error) {
       console.error('Error deleting transaction:', error);
-      alert('Fehler beim Löschen der Transaktion. Bitte versuchen Sie es erneut.');
+      alert(UI_MESSAGES.DELETE_ERROR);
     } finally {
       setShowDeleteModal(false);
       setTransactionToDelete(null);
@@ -445,20 +381,28 @@ function App() {
     setTransactionToDelete(null);
   };
 
-  const handleEditTransaction = (transaction: any) => {
+  const handleEditTransaction = (transaction: Transaction) => {
     setTransactionToEdit(transaction);
     setShowEditModal(true);
   };
 
-  const saveEditTransaction = async (transactionId: string, updatedData: any) => {
+  const saveEditTransaction = async (
+    transactionId: string, 
+    updatedData: {
+      description: string;
+      amount: number;
+      location: string;
+      type: 'income' | 'expense';
+      date: string;
+    }) => {
     try {
       await updateTransaction(transactionId, updatedData);
       
       // Refresh transaction list if available
-      window.location.reload(); // Simple refresh for now
+      window.location.reload(); // TODO: Replace with a more elegant state update
     } catch (error) {
       console.error('Error updating transaction:', error);
-      alert('Fehler beim Aktualisieren der Transaktion. Bitte versuchen Sie es erneut.');
+      alert(UI_MESSAGES.UPDATE_ERROR);
     } finally {
       setShowEditModal(false);
       setTransactionToEdit(null);
@@ -470,17 +414,49 @@ function App() {
     setTransactionToEdit(null);
   };
 
+  const handleAddTransaction = (prefilledData: Partial<Transaction> = {}) => {
+    setNewTransactionProps(prefilledData);
+    setShowAddModal(true);
+  };
+
+  const saveNewTransaction = async (newTransactionData: Omit<Transaction, 'id'>) => {
+    try {
+      await addTransaction({
+        ...newTransactionData,
+        amount: newTransactionData.amount.toString(),
+      });
+      window.location.reload(); // TODO: Replace with a more elegant state update
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      alert(UI_MESSAGES.ADD_ERROR);
+    } finally {
+      setShowAddModal(false);
+      setNewTransactionProps({});
+    }
+  };
+
+  const cancelAddTransaction = () => {
+    setShowAddModal(false);
+    setNewTransactionProps({});
+  };
+
   return (
     <Router>
       <AppLayout>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={
+            <HomePage 
+              onDeleteTransaction={handleDeleteTransaction}
+              onEditTransaction={handleEditTransaction}
+            />
+          } />
           <Route path="/bilanzen" element={<BilanzPage />} />
           <Route path="/geplant" element={<PlannedExpensesPage />} />
           <Route path="/business" element={
             <BusinessOverviewPage 
               onDeleteTransaction={handleDeleteTransaction}
               onEditTransaction={handleEditTransaction}
+              onAddTransaction={handleAddTransaction}
             />
           } />
           <Route path="/hm" element={<HMPage />} />
@@ -503,6 +479,13 @@ function App() {
           transaction={transactionToEdit}
           onSave={saveEditTransaction}
           onCancel={cancelEditTransaction}
+        />
+
+        <AddTransactionModal
+          isOpen={showAddModal}
+          prefilledData={newTransactionProps}
+          onSave={saveNewTransaction}
+          onCancel={cancelAddTransaction}
         />
       </AppLayout>
     </Router>

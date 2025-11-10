@@ -20,9 +20,10 @@ interface MonthData {
 interface BusinessOverviewPageProps {
   onDeleteTransaction?: (transactionId: string) => void;
   onEditTransaction?: (transaction: any) => void;
+  onAddTransaction?: (transaction: Partial<Transaction>) => void;
 }
 
-export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }: BusinessOverviewPageProps) => {
+export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, onAddTransaction }: BusinessOverviewPageProps) => {
   const [months, setMonths] = useState<MonthData[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(new Date().getFullYear());
@@ -138,13 +139,7 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
     ? months.filter(month => month.businessCount > 0) // Nur Monate mit Business-Transaktionen
     : months.filter(month => month.year === selectedYear && month.businessCount > 0);
 
-  // Berechne Jahresgesamtwerte für Business-Transaktionen
-  const yearTotalBusiness = filteredMonths.reduce((acc, month) => ({
-    income: acc.income + month.income,
-    expenses: acc.expenses + month.expenses,
-    balance: acc.balance + month.balance,
-    count: acc.count + month.businessCount
-  }), { income: 0, expenses: 0, balance: 0, count: 0 });
+
 
   if (isInitialLoading) {
     return (
@@ -209,43 +204,21 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
                   </select>
                 )}
               </div>
+              {onAddTransaction && (
+                <button
+                  onClick={() => onAddTransaction({ isBusiness: true })}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Hinzufügen</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Jahresübersicht für Business-Transaktionen */}
-          <div className="mb-8">
-            <h3 className="text-lg font-medium text-white mb-4">
-              Geschäfts-Jahresübersicht {selectedYear === 'all' ? '(Alle Jahre)' : selectedYear}
-            </h3>
-            <div className="bg-slate-700/30 rounded-lg p-4">
-              <div className="grid grid-cols-4 gap-4 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-green-400">
-                    +{formatAmount(yearTotalBusiness.income)}€
-                  </div>
-                  <div className="text-slate-400 text-sm mt-1">Einnahmen</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-red-400">
-                    -{formatAmount(yearTotalBusiness.expenses)}€
-                  </div>
-                  <div className="text-slate-400 text-sm mt-1">Ausgaben</div>
-                </div>
-                <div>
-                  <div className={`text-2xl font-bold ${yearTotalBusiness.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {yearTotalBusiness.balance >= 0 ? '+' : ''}{formatAmount(yearTotalBusiness.balance)}€
-                  </div>
-                  <div className="text-slate-400 text-sm mt-1">Bilanz</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-blue-400">
-                    {yearTotalBusiness.count}
-                  </div>
-                  <div className="text-slate-400 text-sm mt-1">Transaktionen</div>
-                </div>
-              </div>
-            </div>
-          </div>
+
 
           {/* Monatsweise Aufschlüsselung */}
           <div className="space-y-6">
