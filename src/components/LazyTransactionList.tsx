@@ -393,78 +393,33 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             
             {/* Jahresauswahl als Dropdown - direkt neben dem Titel */}
             {availableYears.length > 1 && (
+              <div className="relative">
               <select
                 value={selectedYear}
                 onChange={(e) => handleYearChange(parseInt(e.target.value))}
-                className="px-3 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                className="block appearance-none w-full px-6 py-1.5 bg-slate-800 rounded-2xl text-white text-sm"
               >
                 {availableYears.map(year => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
+                <option key={year} value={year}>
+                  {year}
+                </option>
                 ))}
               </select>
+              </div>
             )}
           </div>
         </div>
         
         {/* Suchfeld mit integriertem Business-Toggle */}
         <div className="relative w-full sm:w-64">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
           <input
             type="text"
-            placeholder="Suchen... (Enter zum Suchen)"
+            placeholder="Suchen..."
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="block w-full pl-10 pr-20 py-2 sm:py-2 border border-slate-600/30 rounded-lg bg-slate-800/50 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            className="block w-full pl-4 sm:py-3 rounded-2xl bg-slate-800/50 text-white placeholder-slate-400 focus:border-transparent text-sm"
           />
-          
-          {/* Business Toggle Switch und X-Button im Suchfeld */}
-          <div className="absolute inset-y-0 right-0 pr-3 flex items-center space-x-2">
-            {searchTerm && (
-              <button
-                onClick={() => {
-                  handleSearchChange('');
-                  setActiveSearchTerm('');
-                  const currentDate = new Date();
-                  const currentMonthYear = currentDate.toLocaleDateString('de-DE', {
-                    month: 'long',
-                    year: 'numeric',
-                  });
-                  // Nur Monate des ausgewählten Jahres berücksichtigen
-                  setMonths(prev => prev.map(month => ({
-                    ...month,
-                    isExpanded: month.monthYear === currentMonthYear && month.year === selectedYear
-                  })));
-                }}
-                className="text-slate-400 hover:text-white transition-colors"
-                title="Suche löschen"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowOnlyBusiness(!showOnlyBusiness)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-                showOnlyBusiness ? 'bg-blue-600' : 'bg-slate-600'
-              }`}
-              title={showOnlyBusiness ? "Alle Transaktionen anzeigen" : "Nur Geschäftstransaktionen anzeigen"}
-            >
-              <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 ${
-                  showOnlyBusiness ? 'translate-x-5' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
         </div>
       </div>
       

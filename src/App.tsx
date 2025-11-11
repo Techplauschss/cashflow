@@ -245,8 +245,8 @@ function HomePage({
                   <button
                     type="button"
                     onClick={() => setIsBusiness(!isBusiness)}
-                    className={`w-12 h-12 rounded-lg font-bold text-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
-                      isBusiness ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                    className={`w-12 h-12 rounded-3xl font-bold text-lg transition-all duration-200 ${
+                      isBusiness ? 'bg-blue-700 text-white shadow-xl' : 'bg-slate-800 text-white hover:bg-slate-200 hover:text-black'
                     }`}
                     title={isBusiness ? "Geschäftstransaktion" : "Private Transaktion"}
                   >
@@ -256,24 +256,24 @@ function HomePage({
 
                 {/* Type Switch */}
                 <div className="md:col-span-1 flex items-center justify-center">
-                  <div className="flex items-center justify-center space-x-3 h-12">
-                    <span className={`text-sm font-medium ${type === 'E' ? 'text-green-400' : 'text-slate-400'}`}>
+                  <div className="flex items-center justify-center space-x-3 h-14">
+                    <span className={`text-lg font-medium ${type === 'E' ? 'text-green-600' : 'text-slate-400'}`}>
                       E
                     </span>
                     <button
                       type="button"
                       onClick={() => setType(type === 'E' ? 'A' : 'E')}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                      className={`relative inline-flex h-6 w-20 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
                         type === 'E' ? 'bg-green-600' : 'bg-red-600'
                       }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                          type === 'E' ? 'translate-x-1' : 'translate-x-6'
+                        className={`inline-block h-8 w-8 transform rounded-full bg-white transition-transform duration-200 ${
+                          type === 'E' ? 'translate-x' : 'translate-x-12'
                         }`}
                       />
                     </button>
-                    <span className={`text-sm font-medium ${type === 'A' ? 'text-red-400' : 'text-slate-400'}`}>
+                    <span className={`text-lg font-medium ${type === 'A' ? 'text-red-400' : 'text-slate-400'}`}>
                       A
                     </span>
                   </div>

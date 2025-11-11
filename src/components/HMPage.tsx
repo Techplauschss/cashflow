@@ -12,13 +12,12 @@ export const HMPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [allHMTransactions, setAllHMTransactions] = useState<Transaction[]>([]);
   
   // State for filtering functionality
-  const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('month');
+  const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -191,29 +190,6 @@ export const HMPage = () => {
   const cancelDeleteTransaction = () => {
     setShowDeleteModal(false);
     setTransactionToDelete(null);
-  };
-
-  const handleResetAllTransactions = () => {
-    setShowResetModal(true);
-  };
-
-  const confirmResetAllTransactions = async () => {
-    try {
-      // Lösche alle H+M Transaktionen
-      const deletePromises = allHMTransactions.map(transaction => 
-        deleteTransaction(transaction.id)
-      );
-      
-      await Promise.all(deletePromises);
-      console.log('Alle H+M Transaktionen erfolgreich gelöscht');
-    } catch (error) {
-      console.error('Error deleting all H+M transactions:', error);
-    }
-    setShowResetModal(false);
-  };
-
-  const cancelResetAllTransactions = () => {
-    setShowResetModal(false);
   };
 
   const formatAmount = (amount: number): string => {
@@ -450,31 +426,6 @@ export const HMPage = () => {
         </div>
       </div>
 
-      {/* Reset Button - nur anzeigen wenn Transaktionen vorhanden */}
-      {allHMTransactions.length > 0 && (
-        <div className="mt-6 flex justify-center">
-          <button
-            onClick={handleResetAllTransactions}
-            className="inline-flex items-center justify-center px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-900 text-sm"
-          >
-            <svg 
-              className="w-4 h-4 mr-2" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" 
-              />
-            </svg>
-            Alle Transaktionen zurücksetzen
-          </button>
-        </div>
-      )}
-
       {/* Modals */}
       <HMModal
         isOpen={showModal}
@@ -497,17 +448,6 @@ export const HMPage = () => {
         cancelText="Abbrechen"
         onConfirm={confirmDeleteTransaction}
         onCancel={cancelDeleteTransaction}
-        isDestructive={true}
-      />
-
-      <ConfirmModal
-        isOpen={showResetModal}
-        title="Alle H+M Transaktionen zurücksetzen"
-        message={`Sind Sie sicher, dass Sie alle ${allHMTransactions.length} H+M Transaktionen löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`}
-        confirmText="Alle löschen"
-        cancelText="Abbrechen"
-        onConfirm={confirmResetAllTransactions}
-        onCancel={cancelResetAllTransactions}
         isDestructive={true}
       />
     </div>
