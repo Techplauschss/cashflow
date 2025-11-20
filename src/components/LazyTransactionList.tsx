@@ -32,7 +32,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [searchLoadingMonths, setSearchLoadingMonths] = useState<Set<string>>(new Set());
-  const [showOnlyBusiness, setShowOnlyBusiness] = useState(false);
+  const [showOnlyBusiness] = useState(false);
 
   // Aktuelles Datum für Filter
   const currentDate = new Date();
