@@ -78,6 +78,36 @@ export const HMPage = () => {
 
   // Schulden-Berechnung
   const debtCalculation = useMemo(() => {
+    const sharedTransactions = filteredTransactions.filter(t => !t.description.includes('schuldet'));
+    const debtTransactions = filteredTransactions.filter(t => t.description.includes('schuldet'));
+
+    const hSharedTotal = sharedTransactions
+      .filter(t => t.description.startsWith('H+'))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const mSharedTotal = sharedTransactions
+      .filter(t => t.description.startsWith('M+'))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalSharedExpenses = hSharedTotal + mSharedTotal;
+    const halfSharedTotal = totalSharedExpenses / 2;
+
+    const martinPaidShared = hSharedTotal;
+    
+    // This is the debt from the 50/50 split
+    let martinOwes = halfSharedTotal - martinPaidShared;
+
+    // Now add the explicit debts
+    debtTransactions.forEach(t => {
+        if (t.description.includes('H schuldet M')) { // H owes M, M paid
+            martinOwes += t.amount;
+        } else if (t.description.includes('M schuldet H')) { // M owes H, H paid
+            martinOwes -= t.amount;
+        }
+    });
+
+    const netDebt = -martinOwes; // Positiv = Hanna schuldet Martin, Negativ = Martin schuldet Hanna
+
     const hTotal = filteredTransactions
       .filter(t => t.description.startsWith('H+'))
       .reduce((sum, t) => sum + t.amount, 0);
@@ -86,24 +116,12 @@ export const HMPage = () => {
       .filter(t => t.description.startsWith('M+'))
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const totalExpenses = hTotal + mTotal;
-    const halfTotal = totalExpenses / 2;
-
-    // Martin hat H-Ausgaben bezahlt, Hanna hat M-Ausgaben bezahlt
-    const martinPaid = hTotal;
-    const hannaPaid = mTotal;
-
-    // Schulden berechnen: Wer schuldet wem wie viel?
-    // Jeder sollte die Hälfte bezahlen
-    const martinOwes = halfTotal - martinPaid; // Negativ = Martin bekommt Geld
-    const netDebt = -martinOwes; // Positiv = Hanna schuldet Martin, Negativ = Martin schuldet Hanna
-
     return {
       hTotal,
       mTotal,
-      totalExpenses,
-      martinPaid,
-      hannaPaid,
+      totalExpenses: hTotal + mTotal,
+      martinPaid: hTotal, // This is not just martinPaid anymore, it's H's total payment
+      hannaPaid: mTotal, // M's total payment
       netDebt
     };
   }, [filteredTransactions]);
@@ -113,10 +131,19 @@ export const HMPage = () => {
     amount: number;
     location: string;
     type: 'H' | 'M';
+    debtor: 'H' | 'M' | 'none';
   }) => {
     try {
-      // Füge das Präfix H+ oder M+ zur Beschreibung hinzu
-      const prefixedDescription = `${data.type}+ ${data.description}`;
+      let prefixedDescription = '';
+      if (data.debtor === 'none') {
+        prefixedDescription = `${data.type}+ ${data.description}`;
+      } else if (data.debtor === 'H') {
+        // H schuldet M, also hat M bezahlt
+        prefixedDescription = `M+ ${data.description} (H schuldet M)`;
+      } else { // data.debtor === 'M'
+        // M schuldet H, also hat H bezahlt
+        prefixedDescription = `H+ ${data.description} (M schuldet H)`;
+      }
       
       await addTransaction({
         type: 'expense',
@@ -142,10 +169,19 @@ export const HMPage = () => {
     amount: number;
     location: string;
     type: 'H' | 'M';
+    debtor: 'H' | 'M' | 'none';
   }) => {
     try {
-      // Füge das Präfix H+ oder M+ zur Beschreibung hinzu
-      const prefixedDescription = `${updatedData.type}+ ${updatedData.description}`;
+      let prefixedDescription = '';
+      if (updatedData.debtor === 'none') {
+        prefixedDescription = `${updatedData.type}+ ${updatedData.description}`;
+      } else if (updatedData.debtor === 'H') {
+        // H schuldet M, also hat M bezahlt
+        prefixedDescription = `M+ ${updatedData.description} (H schuldet M)`;
+      } else { // data.debtor === 'M'
+        // M schuldet H, also hat H bezahlt
+        prefixedDescription = `H+ ${updatedData.description} (M schuldet H)`;
+      }
       
       await updateTransaction(transactionId, {
         description: prefixedDescription,
@@ -211,7 +247,8 @@ export const HMPage = () => {
   // Transaction card component - mobile optimized
   const TransactionCard = ({ transaction }: { transaction: Transaction }) => {
     const isH = transaction.description.startsWith('H+');
-    const cleanDescription = transaction.description.replace(/^[HM]\+ /, '');
+    const isDebt = transaction.description.includes('schuldet');
+    const cleanDescription = transaction.description.replace(/^[HM]\+ /, '').replace(/\(H schuldet M\)/, '').replace(/\(M schuldet H\)/, '');
 
     return (
       <div className="group bg-slate-800/30 border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-4 hover:bg-slate-800/50 hover:border-slate-500/30 transition-all duration-200">
@@ -230,6 +267,7 @@ export const HMPage = () => {
             </div>
             
             <h3 className="text-white font-medium text-sm sm:text-base mb-1 break-words leading-relaxed">
+              {isDebt && <span className="text-blue-400 font-semibold">Schulden: </span>}
               {cleanDescription}
             </h3>
             

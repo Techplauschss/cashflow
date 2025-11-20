@@ -9,6 +9,7 @@ interface HMEditModalProps {
     amount: number;
     location: string;
     type: 'H' | 'M';
+    debtor: 'H' | 'M' | 'none';
   }) => void;
   onCancel: () => void;
 }
@@ -23,21 +24,36 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'H' | 'M'>('H');
+  const [debtor, setDebtor] = useState<'H' | 'M' | 'none'>('none');
 
   useEffect(() => {
     if (transaction) {
-      // Entferne das H+ oder M+ Präfix von der Beschreibung
-      const cleanDescription = transaction.description.replace(/^[HM]\+ /, '');
+      let currentDebtor: 'H' | 'M' | 'none' = 'none';
+      if (transaction.description.includes('H schuldet M')) {
+        currentDebtor = 'H';
+      } else if (transaction.description.includes('M schuldet H')) {
+        currentDebtor = 'M';
+      }
+      setDebtor(currentDebtor);
+
+      const cleanDescription = transaction.description
+        .replace(/^[HM]\+ /, '')
+        .replace(/\(H schuldet M\)/, '')
+        .replace(/\(M schuldet H\)/, '')
+        .trim();
+      
       setDescription(cleanDescription);
       setAmount(Math.abs(transaction.amount).toFixed(2).replace('.', ','));
       setLocation(transaction.location);
-      // Bestimme den Typ basierend auf dem Präfix
+      
       setType(transaction.description.startsWith('H+') ? 'H' : 'M');
+
     } else {
       setDescription('');
       setAmount('');
       setLocation('');
       setType('H');
+      setDebtor('none');
     }
   }, [transaction]);
 
@@ -90,7 +106,8 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
       description,
       amount: numericAmount,
       location,
-      type
+      type,
+      debtor
     });
   };
 
@@ -113,32 +130,77 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
         
         <div className="space-y-4 sm:space-y-6">
           {/* H/M Toggle */}
-          <div>
+          <div className={`${debtor !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Kategorie
+              Wer hat bezahlt?
             </label>
             <div className="grid grid-cols-2 gap-2 bg-slate-700/50 rounded-lg p-1">
               <button
                 type="button"
-                onClick={() => setType('H')}
+                onClick={() => debtor === 'none' && setType('H')}
+                disabled={debtor !== 'none'}
                 className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
-                  type === 'H'
+                  type === 'H' && debtor === 'none'
                     ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg'
                     : 'text-slate-400 hover:text-orange-300'
-                }`}
+                } ${debtor !== 'none' ? 'cursor-not-allowed' : ''}`}
               >
                 H
               </button>
               <button
                 type="button"
-                onClick={() => setType('M')}
+                onClick={() => debtor === 'none' && setType('M')}
+                disabled={debtor !== 'none'}
                 className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
-                  type === 'M'
+                  type === 'M' && debtor === 'none'
                     ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg'
                     : 'text-slate-400 hover:text-red-300'
-                }`}
+                } ${debtor !== 'none' ? 'cursor-not-allowed' : ''}`}
               >
                 M
+              </button>
+            </div>
+            {debtor !== 'none' && <p className="text-xs text-slate-500 mt-1">Wird durch "Wer schuldet wem?" bestimmt.</p>}
+          </div>
+
+          {/* Debtor Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Wer schuldet wem?
+            </label>
+            <div className="grid grid-cols-3 gap-2 bg-slate-700/50 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setDebtor('H')}
+                className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  debtor === 'H'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg'
+                    : 'text-slate-400 hover:text-blue-300'
+                }`}
+              >
+                H schuldet M
+              </button>
+              <button
+                type="button"
+                onClick={() => setDebtor('M')}
+                className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  debtor === 'M'
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg'
+                    : 'text-slate-400 hover:text-purple-300'
+                }`}
+              >
+                M schuldet H
+              </button>
+              <button
+                type="button"
+                onClick={() => setDebtor('none')}
+                className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  debtor === 'none'
+                    ? 'bg-slate-600 text-white shadow-lg'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Keine Schulden
               </button>
             </div>
           </div>

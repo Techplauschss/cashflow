@@ -8,6 +8,7 @@ interface HMModalProps {
     amount: number;
     location: string;
     type: 'H' | 'M';
+    debtor: 'H' | 'M' | 'none';
   }) => void;
 }
 
@@ -16,6 +17,7 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'H' | 'M'>('H');
+  const [debtor, setDebtor] = useState<'H' | 'M' | 'none'>('none');
   const [isLoading, setIsLoading] = useState(false);
 
   const formatAmount = (value: string): string => {
@@ -83,7 +85,8 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
         description: description.trim(),
         amount: numericAmount,
         location: location.trim() || 'Unbekannt',
-        type
+        type,
+        debtor
       });
 
       // Formular zurücksetzen
@@ -91,6 +94,7 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
       setAmount('');
       setLocation('');
       setType('H');
+      setDebtor('none');
       
       onClose();
     } catch (error) {
@@ -136,32 +140,77 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* H/M Category Selection */}
-          <div>
+          <div className={`${debtor !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <label className="block text-sm font-medium text-slate-300 mb-2 sm:mb-3">
-              Kategorie auswählen
+              Wer hat bezahlt?
             </label>
             <div className="grid grid-cols-2 gap-2 sm:gap-3 bg-slate-700/30 rounded-lg p-1.5 sm:p-2">
               <button
                 type="button"
-                onClick={() => setType('H')}
+                onClick={() => debtor === 'none' && setType('H')}
+                disabled={debtor !== 'none'}
                 className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
-                  type === 'H'
+                  type === 'H' && debtor === 'none'
                     ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg transform scale-[1.02]'
                     : 'text-orange-300 hover:text-orange-200 hover:bg-orange-900/20'
-                }`}
+                } ${debtor !== 'none' ? 'cursor-not-allowed' : ''}`}
               >
                 <span>H</span>
               </button>
               <button
                 type="button"
-                onClick={() => setType('M')}
+                onClick={() => debtor === 'none' && setType('M')}
+                disabled={debtor !== 'none'}
                 className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
-                  type === 'M'
+                  type === 'M' && debtor === 'none'
                     ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg transform scale-[1.02]'
                     : 'text-red-300 hover:text-red-200 hover:bg-red-900/20'
-                }`}
+                } ${debtor !== 'none' ? 'cursor-not-allowed' : ''}`}
               >
                 <span>M</span>
+              </button>
+            </div>
+            {debtor !== 'none' && <p className="text-xs text-slate-500 mt-1">Wird durch "Wer schuldet wem?" bestimmt.</p>}
+          </div>
+
+          {/* Debtor Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2 sm:mb-3">
+              Wer schuldet wem?
+            </label>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 bg-slate-700/30 rounded-lg p-1.5 sm:p-2">
+              <button
+                type="button"
+                onClick={() => setDebtor('H')}
+                className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
+                  debtor === 'H'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg transform scale-[1.02]'
+                    : 'text-blue-300 hover:text-blue-200 hover:bg-blue-900/20'
+                }`}
+              >
+                <span>H schuldet M</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDebtor('M')}
+                className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
+                  debtor === 'M'
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg transform scale-[1.02]'
+                    : 'text-purple-300 hover:text-purple-200 hover:bg-purple-900/20'
+                }`}
+              >
+                <span>M schuldet H</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDebtor('none')}
+                className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
+                  debtor === 'none'
+                    ? 'bg-slate-600 text-white shadow-lg transform scale-[1.02]'
+                    : 'text-slate-300 hover:text-slate-200 hover:bg-slate-900/20'
+                }`}
+              >
+                <span>Keine Schulden</span>
               </button>
             </div>
           </div>
