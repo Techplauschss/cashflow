@@ -114,13 +114,21 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Lade verfügbare Monate
   const loadAvailableMonths = async () => {
     try {
+      console.log('🔄 [loadAvailableMonths] Starting to load available months...');
       const availableMonths = await getAvailableMonths();
+      console.log('📅 [loadAvailableMonths] Available months:', availableMonths);
+      
       const currentDate = new Date();
       const currentMonthYear = currentDate.toLocaleDateString('de-DE', {
         month: 'long',
         year: 'numeric',
       });
+      console.log('📆 [loadAvailableMonths] Current month (formatted):', currentMonthYear);
 
+      // Finde den aktuellen Monat in den verfügbaren Monaten
+      const currentMonthData = availableMonths.find(m => m.monthYear === currentMonthYear);
+      console.log('🎯 [loadAvailableMonths] Current month data found:', currentMonthData);
+      
       const monthsWithState = availableMonths.map(month => ({
         ...month,
         isExpanded: month.monthYear === currentMonthYear,
@@ -130,25 +138,28 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
       // Alle Monate speichern
       setAllMonths(monthsWithState);
+      console.log('💾 [loadAvailableMonths] Saved all months with state:', monthsWithState);
       
       // Verfügbare Jahre extrahieren
       const years = [...new Set(monthsWithState.map(m => m.year))].sort((a, b) => b - a);
       setAvailableYears(years);
+      console.log('📊 [loadAvailableMonths] Available years:', years);
       
       // Monate für das aktuelle Jahr filtern
       filterMonthsByYear(monthsWithState, selectedYear);
+      console.log(`📋 [loadAvailableMonths] Filtered months for year ${selectedYear}`);
       
       setIsInitialLoading(false);
       
       // Lade Transaktionen für den aktuellen Monat automatisch (falls im ausgewählten Jahr)
-      const currentMonth = monthsWithState.find(month => 
-        month.monthYear === currentMonthYear && month.year === selectedYear
-      );
-      if (currentMonth) {
-        await loadTransactionsForMonth(currentMonth.year, currentMonth.month);
+      if (currentMonthData && currentMonthData.year === selectedYear) {
+        console.log(`⏳ [loadAvailableMonths] Loading transactions for current month: ${currentMonthData.year}-${currentMonthData.month}`);
+        await loadTransactionsForMonth(currentMonthData.year, currentMonthData.month);
+      } else {
+        console.log('⚠️ [loadAvailableMonths] Current month not found or not in selected year');
       }
     } catch (error) {
-      console.error('Error loading months:', error);
+      console.error('❌ [loadAvailableMonths] Error loading months:', error);
       setIsInitialLoading(false);
     }
   };
@@ -169,6 +180,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // Lade Transaktionen für einen Monat
   const loadTransactionsForMonth = async (year: number, month: number) => {
+    console.log(`📥 [loadTransactionsForMonth] Starting to load transactions for ${year}-${month}`);
+    
     setMonths(prev => prev.map(m =>
       m.year === year && m.month === month
         ? { ...m, isLoading: true }
@@ -177,13 +190,16 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
     try {
       const transactions = await getTransactionsForMonth(year, month);
+      console.log(`📥 [loadTransactionsForMonth] Successfully loaded ${transactions.length} transactions for ${year}-${month}:`, transactions);
+      
       setMonths(prev => prev.map(m =>
         m.year === year && m.month === month
           ? { ...m, transactions, isLoading: false }
           : m
       ));
+      console.log(`✅ [loadTransactionsForMonth] Updated month data in state`);
     } catch (error) {
-      console.error('Error loading transactions:', error);
+      console.error(`❌ [loadTransactionsForMonth] Error loading transactions for ${year}-${month}:`, error);
       setMonths(prev => prev.map(m =>
         m.year === year && m.month === month
           ? { ...m, isLoading: false }
@@ -333,9 +349,25 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     }).format(amount);
   };
 
-  // Ref-Handler
+  // Ref-Handler mit verbessertem refreshData
+  const refreshData = async () => {
+    console.log('🔄 [refreshData] REFRESH TRIGGERED - Clearing and reloading all data');
+    
+    // Leere die Transaktionen aller bereits geladenen Monate
+    setMonths(prev => prev.map(m => ({
+      ...m,
+      transactions: undefined,
+      isLoading: false
+    })));
+    console.log('🗑️ [refreshData] Cleared all loaded transactions');
+    
+    // Lade die verfügbaren Monate neu
+    await loadAvailableMonths();
+    console.log('✅ [refreshData] Refresh complete');
+  };
+
   useImperativeHandle(ref, () => ({
-    refreshData: loadAvailableMonths
+    refreshData: refreshData
   }));
 
   // Initial laden

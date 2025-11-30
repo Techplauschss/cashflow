@@ -20,11 +20,14 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
   };
 
+  console.log('🔵 [addTransaction] Adding new transaction:', transaction);
+
   try {
     const newTransactionRef = await push(transactionsRef, transaction);
+    console.log('✅ [addTransaction] Successfully added transaction with ID:', newTransactionRef.key);
     return newTransactionRef.key!;
   } catch (error) {
-    console.error('Error adding transaction:', error);
+    console.error('❌ [addTransaction] Error adding transaction:', error);
     throw new Error('Fehler beim Hinzufügen der Transaktion');
   }
 };
@@ -59,8 +62,11 @@ export const getTransactionsForMonth = async (year: number, month: number): Prom
   const transactionsRef = ref(database, 'transactions');
   
   // Erstelle Start- und Enddatum für den Monat
-  const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-  const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+  // Wichtig: Nutze UTC um Timezone-Probleme zu vermeiden
+  const startDate = new Date(Date.UTC(year, month - 1, 1)).toISOString().split('T')[0];
+  const endDate = new Date(Date.UTC(year, month, 0)).toISOString().split('T')[0];
+  
+  console.log(`🔍 [getTransactionsForMonth] Loading transactions for ${year}-${month} (${startDate} to ${endDate})`);
   
   const monthQuery = query(
     transactionsRef,
@@ -72,19 +78,30 @@ export const getTransactionsForMonth = async (year: number, month: number): Prom
   return new Promise((resolve, reject) => {
     onValue(monthQuery, (snapshot) => {
       const data = snapshot.val();
+      console.log(`📊 [getTransactionsForMonth] Raw data from Firebase:`, data);
+      
       if (data) {
-        const transactions: Transaction[] = Object.entries(data)
-          .map(([id, transaction]) => ({
-            id,
-            ...(transaction as Omit<Transaction, 'id'>),
-          }))
-          .filter(transaction => !transaction.isPlanned); // Filtere geplante Transaktionen aus
+        const allTransactions = Object.entries(data).map(([id, transaction]) => ({
+          id,
+          ...(transaction as Omit<Transaction, 'id'>),
+        }));
+        
+        console.log(`📋 [getTransactionsForMonth] All transactions before filtering (${allTransactions.length}):`, allTransactions);
+        
+        const transactions: Transaction[] = allTransactions
+          .filter(transaction => !transaction.isPlanned) // Filtere geplante Transaktionen aus
+          .filter(transaction => 
+            !transaction.description.startsWith('H+') && !transaction.description.startsWith('M+')
+          ); // Filtere H+M Transaktionen aus
+        
+        console.log(`✅ [getTransactionsForMonth] Transactions after filtering (${transactions.length}):`, transactions);
         resolve(transactions);
       } else {
+        console.log(`⚠️ [getTransactionsForMonth] No data found for this month`);
         resolve([]);
       }
     }, (error) => {
-      console.error('Error fetching transactions for month:', error);
+      console.error('❌ [getTransactionsForMonth] Error fetching transactions for month:', error);
       reject(error);
     }, { onlyOnce: true });
   });

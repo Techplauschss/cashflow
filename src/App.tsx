@@ -95,6 +95,7 @@ function HomePage({
     setIsLoading(true);
     
     try {
+      console.log('💾 [HomePage handleSubmit] Attempting to add transaction...');
       await addTransaction({
         type: type === 'E' ? 'income' : 'expense',
         amount: amount,
@@ -112,7 +113,9 @@ function HomePage({
       
       // Aktualisiere die Transaktionsliste
       if (transactionListRef.current) {
-        transactionListRef.current.refreshData();
+        console.log('🔄 [HomePage handleSubmit] Calling refreshData on transaction list...');
+        await transactionListRef.current.refreshData();
+        console.log('✅ [HomePage handleSubmit] Transaction list refreshed');
       }
       
     } catch (error) {
