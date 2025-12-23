@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Firebase credentials (should never be committed)
+*-firebase-adminsdk-*.json
+firebase-adminsdk-*.json
