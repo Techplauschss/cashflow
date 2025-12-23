@@ -56,18 +56,27 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   };
 
   const formatAmount = (value: string): string => {
-    const cleanValue = value.replace(/\./g, '');
-    const parts = cleanValue.split(',');
-    const integerPart = parts[0];
-    let decimalPart = parts[1];
+    // Entferne alle Zeichen außer Zahlen, Komma und Punkt
+    let cleanValue = value.replace(/[^\d,\.]/g, '');
     
-    if (decimalPart && decimalPart.length > 2) {
+    // Entferne alle Punkte (Tausender-Trennzeichen)
+    cleanValue = cleanValue.replace(/\./g, '');
+    
+    // Stelle sicher, dass es nur ein Komma gibt
+    const parts = cleanValue.split(',');
+    let integerPart = parts[0] || '';
+    let decimalPart = parts[1] || '';
+    
+    // Begrenze Dezimalstellen auf 2
+    if (decimalPart.length > 2) {
       decimalPart = decimalPart.substring(0, 2);
     }
     
+    // Füge Tausender-Trennzeichen hinzu
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     
-    return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger;
+    // Gebe das formatierte Ergebnis zurück
+    return decimalPart ? `${formattedInteger},${decimalPart}` : formattedInteger;
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
