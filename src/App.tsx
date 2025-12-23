@@ -318,7 +318,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const isHMPage = location.pathname === '/hm';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-transparent">
       {/* Global Header mit Navigation - nur anzeigen wenn nicht auf H+M Seite */}
       {!isHMPage && (
         <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8">
