@@ -418,11 +418,14 @@ function App() {
     setShowAddModal(true);
   };
 
-  const saveNewTransaction = async (newTransactionData: Omit<Transaction, 'id'>) => {
+  const saveNewTransaction = async (newTransactionData: { type: 'income' | 'expense'; amount: string; description: string; location: string; date: string; timestamp: number; isBusiness?: boolean; }) => {
     try {
       await addTransaction({
-        ...newTransactionData,
-        amount: newTransactionData.amount.toString(),
+        type: newTransactionData.type,
+        amount: newTransactionData.amount,
+        description: newTransactionData.description,
+        location: newTransactionData.location,
+        date: newTransactionData.date,
         isBusiness: newTransactionData.isBusiness ?? false,
       });
       window.location.reload(); // TODO: Replace with a more elegant state update

@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import type { Transaction } from '../types/Transaction';
 
-type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean };
+type NewTransactionData = {
+  type: 'income' | 'expense';
+  amount: string; // String für Form-Daten
+  description: string;
+  location: string;
+  date: string;
+  timestamp: number;
+  kilometerstand?: number;
+  liter?: number;
+  isPlanned?: boolean;
+  isBusiness?: boolean;
+};
 
 interface AddTransactionModalProps {
   isOpen: boolean;
