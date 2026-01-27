@@ -6,7 +6,6 @@ import { BilanzPage } from './components/BilanzPage';
 import { PlannedExpensesPage } from './components/PlannedExpensesPage';
 import { BusinessOverviewPage } from './components/BusinessOverviewPage';
 import { HMPage } from './components/HMPage';
-import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
@@ -341,8 +340,6 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   // App-level states for modals
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -351,30 +348,14 @@ function App() {
 
   // App-level transaction handlers
   const handleDeleteTransaction = async (transactionId: string) => {
-    setTransactionToDelete(transactionId);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDeleteTransaction = async () => {
-    if (!transactionToDelete) return;
-
     try {
-      await deleteTransaction(transactionToDelete);
-      
+      await deleteTransaction(transactionId);
       // Refresh transaction list if available
       window.location.reload(); // TODO: Replace with a more elegant state update
     } catch (error) {
       console.error('Error deleting transaction:', error);
       alert(UI_MESSAGES.DELETE_ERROR);
-    } finally {
-      setShowDeleteModal(false);
-      setTransactionToDelete(null);
     }
-  };
-
-  const cancelDeleteTransaction = () => {
-    setShowDeleteModal(false);
-    setTransactionToDelete(null);
   };
 
   const handleEditTransaction = (transaction: Transaction) => {
@@ -411,11 +392,6 @@ function App() {
   const cancelEditTransaction = () => {
     setShowEditModal(false);
     setTransactionToEdit(null);
-  };
-
-  const handleAddTransaction = (prefilledData: Partial<Transaction> = {}) => {
-    setNewTransactionProps(prefilledData);
-    setShowAddModal(true);
   };
 
   const saveNewTransaction = async (newTransactionData: { type: 'income' | 'expense'; amount: string; description: string; location: string; date: string; timestamp: number; isBusiness?: boolean; }) => {
@@ -459,24 +435,12 @@ function App() {
             <BusinessOverviewPage 
               onDeleteTransaction={handleDeleteTransaction}
               onEditTransaction={handleEditTransaction}
-              onAddTransaction={handleAddTransaction}
             />
           } />
           <Route path="/hm" element={<HMPage />} />
         </Routes>
         
         {/* Global Modals */}
-        <ConfirmModal
-          isOpen={showDeleteModal}
-          title="Transaktion löschen"
-          message="Sind Sie sicher, dass Sie diese Transaktion dauerhaft löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
-          confirmText="Löschen"
-          cancelText="Abbrechen"
-          onConfirm={confirmDeleteTransaction}
-          onCancel={cancelDeleteTransaction}
-          isDestructive={true}
-        />
-
         <EditTransactionModal
           isOpen={showEditModal}
           transaction={transactionToEdit}

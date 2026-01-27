@@ -28,6 +28,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [allMonths, setAllMonths] = useState<MonthData[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [deletingTransactions, setDeletingTransactions] = useState<Set<string>>(new Set());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -77,7 +78,25 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Text kürzen wenn länger als 30 Zeichen
   const truncateText = (text: string, maxLength: number = 30): string => {
     if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength - 3) + '...';
+    return text.substring(0, maxLength) + '...';
+  };
+
+  // Wrapper für Lösch-Funktion mit Loading-State
+  const handleDeleteTransaction = async (transactionId: string) => {
+    if (!onDeleteTransaction) return;
+
+    setDeletingTransactions(prev => new Set(prev).add(transactionId));
+    try {
+      await onDeleteTransaction(transactionId);
+      // Daten nach erfolgreichem Löschen neu laden
+      await refreshData();
+    } finally {
+      setDeletingTransactions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(transactionId);
+        return newSet;
+      });
+    }
   };
 
   // Prüft ob eine Transaktion eine Tanken-Transaktion ist (nur für Anzeige)
@@ -559,8 +578,22 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                         return (
                           <div
                             key={transaction.id}
-                            className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-2 sm:p-3 hover:bg-slate-800/50 transition-all"
+                            className={`group bg-slate-800/30 border border-slate-600/30 rounded-lg p-2 sm:p-3 hover:bg-slate-800/50 transition-all relative ${
+                              deletingTransactions.has(transaction.id) ? 'opacity-60' : ''
+                            }`}
                           >
+                            {/* Loading Overlay */}
+                            {deletingTransactions.has(transaction.id) && (
+                              <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
+                                <div className="flex flex-col items-center gap-2">
+                                  <svg className="w-8 h-8 animate-spin text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                  <span className="text-sm font-medium text-blue-300">Wird gelöscht...</span>
+                                </div>
+                              </div>
+                            )}
+                            
                             <div className="flex items-start sm:items-center">
                               <div className="flex-1 min-w-0">
                                 <div>
@@ -633,13 +666,17 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                                         variant: 'default' as const
                                       }] : []),
                                       ...(onDeleteTransaction ? [{
-                                        label: 'Löschen',
-                                        icon: (
+                                        label: deletingTransactions.has(transaction.id) ? 'Wird gelöscht...' : 'Löschen',
+                                        icon: deletingTransactions.has(transaction.id) ? (
+                                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                          </svg>
+                                        ) : (
                                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                           </svg>
                                         ),
-                                        onClick: () => onDeleteTransaction(transaction.id),
+                                        onClick: () => handleDeleteTransaction(transaction.id),
                                         variant: 'destructive' as const
                                       }] : [])
                                     ]}
