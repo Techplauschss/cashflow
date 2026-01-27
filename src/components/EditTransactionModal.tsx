@@ -31,7 +31,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   useEffect(() => {
     if (transaction) {
       setDescription(transaction.description);
-      setAmount(Math.abs(transaction.amount).toFixed(2).replace('.', ','));
+      setAmount(Math.abs(transaction.amount).toString());
       setLocation(transaction.location);
       setType(transaction.type);
       setDate(transaction.date);
@@ -41,53 +41,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
   if (!isOpen || !transaction) return null;
 
-  const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const allowedKeys = [
-      'Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 
-      'ArrowUp', 'ArrowDown', 'Home', 'End'
-    ];
-    
-    const isNumber = /^[0-9]$/.test(e.key);
-    const isCommaOrDot = e.key === ',' || e.key === '.';
-    const isAllowedKey = allowedKeys.includes(e.key);
-    const isCtrlA = e.ctrlKey && e.key === 'a';
-    const isCtrlC = e.ctrlKey && e.key === 'c';
-    const isCtrlV = e.ctrlKey && e.key === 'v';
-    const isCtrlX = e.ctrlKey && e.key === 'x';
-    
-    if (!isNumber && !isCommaOrDot && !isAllowedKey && !isCtrlA && !isCtrlC && !isCtrlV && !isCtrlX) {
-      e.preventDefault();
-    }
-  };
 
-  const formatAmount = (value: string): string => {
-    // Entferne alle Zeichen außer Zahlen, Komma und Punkt
-    let cleanValue = value.replace(/[^\d,\.]/g, '');
-    
-    // Entferne alle Punkte (Tausender-Trennzeichen)
-    cleanValue = cleanValue.replace(/\./g, '');
-    
-    // Stelle sicher, dass es nur ein Komma gibt
-    const parts = cleanValue.split(',');
-    let integerPart = parts[0] || '';
-    let decimalPart = parts[1] || '';
-    
-    // Begrenze Dezimalstellen auf 2
-    if (decimalPart.length > 2) {
-      decimalPart = decimalPart.substring(0, 2);
-    }
-    
-    // Füge Tausender-Trennzeichen hinzu
-    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    
-    // Gebe das formatierte Ergebnis zurück
-    return decimalPart ? `${formattedInteger},${decimalPart}` : formattedInteger;
-  };
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatAmount(e.target.value);
-    setAmount(formatted);
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,12 +51,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       return;
     }
 
-    const numericAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'));
-    
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      alert('Bitte geben Sie einen gültigen Betrag ein.');
-      return;
-    }
+    const numericAmount = parseFloat(amount);
 
     onSave(transaction.id, {
       description: description.trim(),
@@ -173,10 +122,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </label>
               <span className="absolute left-3 top-10 text-slate-400">€</span>
               <input
-                type="text"
+                type="number"
+                step="any"
                 value={amount}
-                onChange={handleAmountChange}
-                onKeyDown={handleAmountKeyDown}
+                onChange={(e) => setAmount(e.target.value)}
                 className="w-full pl-8 pr-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="0,00"
                 required
