@@ -12,6 +12,7 @@ interface MonthData {
   transactions?: Transaction[];
   businessTransactions?: Transaction[];
   isLoading: boolean;
+  isExpanded: boolean;
   income: number;
   expenses: number;
   balance: number;
@@ -34,7 +35,6 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'E' | 'A'>('A'); // E = Einnahme, A = Ausgabe
   const [isBusiness, setIsBusiness] = useState(true); // Standardmäßig Business-Transaktion
-  const [isLoading, setIsLoading] = useState(false);
 
   // Delete loading state
   const [deletingTransactions, setDeletingTransactions] = useState<Set<string>>(new Set());
@@ -95,9 +95,11 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
 
     setDeletingTransactions(prev => new Set(prev).add(transactionId));
     try {
-      await onDeleteTransaction(transactionId);
-      // Daten nach erfolgreichem Löschen neu laden
-      await loadAvailableMonths();
+      // DELETE-Request senden, aber nicht auf Rückmeldung warten
+      onDeleteTransaction(transactionId);
+      
+      // SOFORT die gesamte Seite neu laden
+      window.location.reload();
     } finally {
       setDeletingTransactions(prev => {
         const newSet = new Set(prev);
@@ -164,11 +166,10 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
       return;
     }
 
-    setIsLoading(true);
-    
     try {
       console.log('💾 [BusinessOverviewPage handleSubmit] Attempting to add business transaction...');
-      await addTransaction({
+      // POST senden, aber nicht auf Rückmeldung warten
+      addTransaction({
         type: type === 'E' ? 'income' : 'expense',
         amount: amount,
         description: description.trim(),
@@ -176,25 +177,16 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
         isBusiness: isBusiness,
       });
 
-      // Formular zurücksetzen
-      setDescription('');
-      setAmount('');
-      setLocation('');
-      setType('A');
-      setIsBusiness(true); // Bleibt Business
-      
-      // Aktualisiere die Daten
-      await loadAvailableMonths();
+      // SOFORT die gesamte Seite neu laden (ohne auf Antwort zu warten)
+      window.location.reload();
       
     } catch (error) {
       console.error('Error adding business transaction:', error);
       alert('Fehler beim Hinzufügen der Geschäftstransaktion. Bitte versuchen Sie es erneut.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  // Lade verfügbare Monate
+  // Lade verfügbare Monate (nur Metadaten, keine Transaktionen)
   const loadAvailableMonths = async () => {
     try {
       const availableMonths = await getAvailableMonths();
@@ -203,41 +195,33 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
       const years = [...new Set(availableMonths.map(month => month.year))].sort((a, b) => b - a);
       setAvailableYears(years);
 
-      // Lade alle Monate parallel
-      const monthsWithData = await Promise.all(
-        availableMonths.map(async (month) => {
-          try {
-            const transactions = await getTransactionsForMonth(month.year, month.month);
-            const businessBalance = calculateBusinessBalance(transactions);
-            const businessTransactions = getBusinessTransactions(transactions);
-            
-            return {
-              ...month,
-              transactions,
-              businessTransactions,
-              businessCount: businessBalance.count,
-              income: businessBalance.income,
-              expenses: businessBalance.expenses,
-              balance: businessBalance.balance,
-              isLoading: false,
-            };
-          } catch (error) {
-            console.error(`Fehler beim Laden der Transaktionen für ${month.monthYear}:`, error);
-            return {
-              ...month,
-              transactions: [],
-              businessTransactions: [],
-              businessCount: 0,
-              income: 0,
-              expenses: 0,
-              balance: 0,
-              isLoading: false,
-            };
-          }
-        })
-      );
+      // Erstelle Monats-Objekte ohne Transaktionen (lazy loading)
+      const currentDate = new Date();
+      const currentMonthYear = currentDate.toLocaleDateString('de-DE', {
+        month: 'long',
+        year: 'numeric',
+      });
 
-      setMonths(monthsWithData);
+      const monthsWithState = availableMonths.map(month => ({
+        ...month,
+        transactions: undefined,
+        businessTransactions: undefined,
+        businessCount: 0, // Wird später berechnet
+        income: 0,
+        expenses: 0,
+        balance: 0,
+        isLoading: false,
+        isExpanded: month.monthYear === currentMonthYear, // Aktueller Monat ist standardmäßig expanded
+      }));
+
+      setMonths(monthsWithState);
+      
+      // Lade Transaktionen für den aktuellen Monat automatisch
+      const currentMonth = monthsWithState.find(m => m.monthYear === currentMonthYear);
+      if (currentMonth) {
+        await loadTransactionsForMonth(currentMonth.year, currentMonth.month);
+      }
+      
       setIsInitialLoading(false);
     } catch (error) {
       console.error('Error loading months:', error);
@@ -245,14 +229,72 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
     }
   };
 
+  // Lade Transaktionen für einen bestimmten Monat (lazy loading)
+  const loadTransactionsForMonth = async (year: number, month: number) => {
+    console.log(`📥 [loadTransactionsForMonth] Loading transactions for ${year}-${month}`);
+    
+    setMonths(prev => prev.map(m =>
+      m.year === year && m.month === month
+        ? { ...m, isLoading: true }
+        : m
+    ));
+
+    try {
+      const transactions = await getTransactionsForMonth(year, month);
+      const businessBalance = calculateBusinessBalance(transactions);
+      const businessTransactions = getBusinessTransactions(transactions);
+      
+      setMonths(prev => prev.map(m =>
+        m.year === year && m.month === month
+          ? { 
+              ...m, 
+              transactions, 
+              businessTransactions,
+              businessCount: businessBalance.count,
+              income: businessBalance.income,
+              expenses: businessBalance.expenses,
+              balance: businessBalance.balance,
+              isLoading: false 
+            }
+          : m
+      ));
+      console.log(`✅ [loadTransactionsForMonth] Updated month data for ${year}-${month}`);
+    } catch (error) {
+      console.error(`❌ [loadTransactionsForMonth] Error loading transactions for ${year}-${month}:`, error);
+      setMonths(prev => prev.map(m =>
+        m.year === year && m.month === month
+          ? { ...m, isLoading: false }
+          : m
+      ));
+    }
+  };
+
+  // Monat ein-/ausklappen (lazy loading trigger)
+  const toggleMonth = async (year: number, month: number) => {
+    const monthData = months.find(m => m.year === year && m.month === month);
+    if (!monthData) return;
+
+    const newExpandedState = !monthData.isExpanded;
+    setMonths(prev => prev.map(m => 
+      m.year === year && m.month === month 
+        ? { ...m, isExpanded: newExpandedState }
+        : m
+    ));
+
+    // Lade Transaktionen, wenn der Monat zum ersten Mal expandiert wird
+    if (newExpandedState && !monthData.transactions && !monthData.isLoading) {
+      await loadTransactionsForMonth(year, month);
+    }
+  };
+
   useEffect(() => {
     loadAvailableMonths();
   }, []);
 
-  // Filtere Monate nach ausgewähltem Jahr
+  // Filtere Monate nach ausgewähltem Jahr (nur geladene Monate anzeigen)
   const filteredMonths = selectedYear === 'all' 
-    ? months.filter(month => month.businessCount > 0) // Nur Monate mit Business-Transaktionen
-    : months.filter(month => month.year === selectedYear && month.businessCount > 0);
+    ? months.filter(month => month.businessCount > 0 || month.transactions !== undefined) // Monate mit Business-Transaktionen oder bereits geladene
+    : months.filter(month => month.year === selectedYear && (month.businessCount > 0 || month.transactions !== undefined));
 
 
 
@@ -482,10 +524,9 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
               {/* Submit Button - Mobile optimiert */}
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold py-2.5 sm:py-4 px-6 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 text-base sm:text-base"
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-2.5 sm:py-4 px-6 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 text-base sm:text-base"
               >
-                {isLoading ? 'Wird hinzugefügt...' : 'Geschäftstransaktion hinzufügen'}
+                Geschäftstransaktion hinzufügen
               </button>
             </form>
           </div>
@@ -494,15 +535,31 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
           <div className="space-y-6">
             {filteredMonths.map((monthData) => (
               <div key={`${monthData.year}-${monthData.month}`}>
-                {/* Monats-Header */}
-                <div className="mb-4 border-b border-slate-600/30 pb-2">
+                {/* Monats-Header - Klickbar für Expand/Collapse */}
+                <div 
+                  className="mb-4 border-b border-slate-600/30 pb-2 cursor-pointer hover:bg-slate-800/20 rounded-lg p-2 transition-all"
+                  onClick={() => toggleMonth(monthData.year, monthData.month)}
+                >
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-slate-300">
-                      {monthData.monthYear}
-                      <span className="ml-2 text-sm text-slate-500">
-                        ({monthData.businessCount} Geschäftstransaktionen)
-                      </span>
-                    </h3>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        className={`transform transition-transform duration-200 ${monthData.isExpanded ? 'rotate-90' : ''}`}
+                        title={monthData.isExpanded ? 'Einklappen' : 'Ausklappen'}
+                      >
+                        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      <h3 className="text-lg font-medium text-slate-300">
+                        {monthData.monthYear}
+                        <span className="ml-2 text-sm text-slate-500">
+                          ({monthData.businessCount} Geschäftstransaktionen)
+                        </span>
+                      </h3>
+                      {monthData.isLoading && (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                      )}
+                    </div>
                     <div className="text-right">
                       <div className={`text-lg font-semibold ${monthData.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {monthData.balance >= 0 ? '+' : ''}{formatAmountDisplay(monthData.balance)}€
@@ -514,9 +571,10 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
                   </div>
                 </div>
 
-                {/* Transaktionen */}
-                <div className="space-y-3">
-                  {monthData.businessTransactions && sortTransactionsByAmount(monthData.businessTransactions).map((transaction) => (
+                {/* Transaktionen - nur anzeigen wenn expanded */}
+                {monthData.isExpanded && (
+                  <div className="space-y-3">
+                    {monthData.businessTransactions && sortTransactionsByAmount(monthData.businessTransactions).map((transaction) => (
                     <div
                       key={transaction.id}
                       className={`group bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 hover:bg-slate-800/50 transition-all relative ${
@@ -606,7 +664,8 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
                       </div>
                     </div>
                   ))}
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
