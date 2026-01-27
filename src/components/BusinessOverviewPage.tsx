@@ -439,9 +439,9 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
 
               {/* Desktop Layout - Grid */}
               <div className="hidden sm:block">
-                <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-10 gap-4">
                   {/* Amount Input */}
-                  <div className="md:col-span-1">
+                  <div className="md:col-span-2">
                     <div className="relative">
                       <span className="absolute left-3 top-3 text-slate-400">€</span>
                       <input
@@ -457,7 +457,7 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
                   </div>
 
                   {/* Description Input */}
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-4">
                     <input
                       type="text"
                       id="business-description-desktop"
@@ -495,7 +495,7 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction }:
                   </div>
 
                   {/* Type Switch */}
-                  <div className="md:col-span-1 flex items-center justify-center">
+                  <div className="md:col-span-2 flex items-center justify-center">
                     <div className="flex items-center justify-center space-x-3 h-14">
                       <span className={`text-lg font-medium ${type === 'E' ? 'text-green-600' : 'text-slate-400'}`}>
                         E
