@@ -302,6 +302,40 @@ export const HMPage = () => {
     setTransactionToDelete(null);
   };
 
+  const handleAddToMain = async (transaction: Transaction) => {
+    try {
+      // Remove H+ or M+ prefix from description
+      const cleanDescription = transaction.description.replace(/^[HM]\+ /, '');
+      
+      // Check if it's a debt transaction (contains "schuldet")
+      const isDebtTransaction = transaction.description.toLowerCase().includes('schuldet');
+      
+      // For 50/50 transactions, only add half the amount
+      const amount = isDebtTransaction ? Math.abs(transaction.amount) : Math.abs(transaction.amount) / 2;
+      
+      // Format amount as German decimal string
+      const formattedAmount = amount.toFixed(2).replace('.', ',');
+      
+      await addTransaction({
+        type: transaction.type,
+        amount: formattedAmount,
+        description: cleanDescription,
+        location: transaction.location,
+        date: transaction.date,
+        isBusiness: false, // Add as personal transaction
+      });
+      
+      // Mark this H+M transaction as added to main
+      await updateTransaction(transaction.id, {
+        addedToMain: true
+      });
+      
+      console.log('Transaktion erfolgreich zur Main-Liste hinzugefügt');
+    } catch (error) {
+      console.error('Error adding transaction to main:', error);
+    }
+  };
+
   const formatAmount = (amount: number): string => {
     return new Intl.NumberFormat('de-DE', {
       style: 'currency',
@@ -411,6 +445,16 @@ export const HMPage = () => {
                       </svg>
                     ),
                     onClick: () => handleEditTransaction(transaction)
+                  },
+                  {
+                    label: 'Zu Main hinzufügen',
+                    icon: (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    ),
+                    onClick: () => handleAddToMain(transaction),
+                    disabled: transaction.addedToMain === true
                   },
                   {
                     label: 'Löschen',

@@ -5,6 +5,7 @@ interface DropdownMenuItem {
   icon: React.ReactNode;
   onClick: () => void;
   variant?: 'default' | 'destructive';
+  disabled?: boolean; // Optional: Deaktiviert den Menüpunkt
 }
 
 interface DropdownMenuProps {
@@ -50,9 +51,12 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({ items, trigger }) =>
           {items.map((item, index) => (
             <button
               key={index}
-              onClick={() => handleItemClick(item)}
+              onClick={() => !item.disabled && handleItemClick(item)}
+              disabled={item.disabled}
               className={`w-full flex items-center px-3 py-2 text-sm transition-colors text-left ${
-                item.variant === 'destructive'
+                item.disabled
+                  ? 'text-slate-500 cursor-not-allowed opacity-50'
+                  : item.variant === 'destructive'
                   ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
                   : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
               }`}

@@ -14,7 +14,7 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     amount: amount,
     description: transactionData.description,
     location: transactionData.location,
-    date: new Date().toISOString().split('T')[0], // Immer aktuelles Datum für normale Transaktionen
+    date: transactionData.date || new Date().toISOString().split('T')[0], // Nutze übergebenes Datum oder aktuelles Datum
     timestamp: Date.now(),
     isPlanned: false, // Normale Transaktionen sind nicht geplant
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
@@ -203,27 +203,32 @@ export const deleteTransaction = async (transactionId: string): Promise<void> =>
 export const updateTransaction = async (
   transactionId: string, 
   updatedData: {
-    description: string;
-    amount: number;
-    location: string;
-    type: 'income' | 'expense';
-    date: string;
+    description?: string;
+    amount?: number;
+    location?: string;
+    type?: 'income' | 'expense';
+    date?: string;
     isBusiness?: boolean;
+    addedToMain?: boolean;
   }
 ): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
   
   try {
-    await update(transactionRef, {
-      description: updatedData.description,
-      amount: updatedData.amount,
-      location: updatedData.location,
-      type: updatedData.type,
-      date: updatedData.date,
-      isBusiness: updatedData.isBusiness || false,
-      // Aktualisiere auch den Timestamp für die Sortierung
+    const updates: Record<string, any> = {
       lastModified: Date.now()
-    });
+    };
+    
+    // Nur definierte Felder aktualisieren
+    if (updatedData.description !== undefined) updates.description = updatedData.description;
+    if (updatedData.amount !== undefined) updates.amount = updatedData.amount;
+    if (updatedData.location !== undefined) updates.location = updatedData.location;
+    if (updatedData.type !== undefined) updates.type = updatedData.type;
+    if (updatedData.date !== undefined) updates.date = updatedData.date;
+    if (updatedData.isBusiness !== undefined) updates.isBusiness = updatedData.isBusiness;
+    if (updatedData.addedToMain !== undefined) updates.addedToMain = updatedData.addedToMain;
+    
+    await update(transactionRef, updates);
   } catch (error) {
     console.error('Error updating transaction:', error);
     throw new Error('Fehler beim Aktualisieren der Transaktion');
