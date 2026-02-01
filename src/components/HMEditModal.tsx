@@ -10,6 +10,7 @@ interface HMEditModalProps {
     location: string;
     type: 'H' | 'M';
     debtor: 'H' | 'M' | 'none';
+    date: string;
   }) => void;
   onCancel: () => void;
 }
@@ -25,6 +26,7 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'H' | 'M'>('H');
   const [debtor, setDebtor] = useState<'H' | 'M' | 'none'>('none');
+  const [date, setDate] = useState('');
 
   useEffect(() => {
     if (transaction) {
@@ -45,6 +47,7 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
       setDescription(cleanDescription);
       setAmount(Math.abs(transaction.amount).toFixed(2).replace('.', ','));
       setLocation(transaction.location);
+      setDate(transaction.date);
       
       setType(transaction.description.startsWith('H+') ? 'H' : 'M');
 
@@ -54,6 +57,7 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
       setLocation('');
       setType('H');
       setDebtor('none');
+      setDate('');
     }
   }, [transaction]);
 
@@ -107,7 +111,8 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
       amount: numericAmount,
       location,
       type,
-      debtor
+      debtor,
+      date
     });
   };
 
@@ -257,6 +262,21 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
               className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-base"
               placeholder="z.B. Supermarkt"
               maxLength={50}
+            />
+          </div>
+
+          {/* Date */}
+          <div>
+            <label htmlFor="edit-date" className="block text-sm font-medium text-slate-300 mb-2">
+              Datum
+            </label>
+            <input
+              id="edit-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-base"
+              required
             />
           </div>
         </div>

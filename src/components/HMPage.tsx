@@ -15,6 +15,7 @@ export const HMPage = () => {
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [allHMTransactions, setAllHMTransactions] = useState<Transaction[]>([]);
+  const [showSettlementModal, setShowSettlementModal] = useState(false);
   
   // State for filtering functionality
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('all');
@@ -35,7 +36,6 @@ export const HMPage = () => {
 
     return unsubscribe;
   }, []);
-
   // Computed values for filtered transactions
   const filteredTransactions = useMemo(() => {
     let filtered = allHMTransactions;
@@ -75,6 +75,79 @@ export const HMPage = () => {
 
     return filtered;
   }, [allHMTransactions, filterPeriod, searchTerm]);
+
+  // Group transactions by settlement periods
+  const transactionGroups = useMemo(() => {
+    const groups: { settlement: Transaction | null; transactions: Transaction[] }[] = [];
+    
+    let currentGroup: Transaction[] = [];
+
+    filteredTransactions.forEach((transaction) => {
+      if (transaction.description.includes('Schuldenausgleich')) {
+        // Found a settlement - close current group and start new one
+        if (currentGroup.length > 0) {
+          groups.push({ settlement: null, transactions: currentGroup });
+        }
+        groups.push({ settlement: transaction, transactions: [] });
+        currentGroup = [];
+      } else {
+        currentGroup.push(transaction);
+      }
+    });
+
+    // Add remaining transactions
+    if (currentGroup.length > 0) {
+      groups.push({ settlement: null, transactions: currentGroup });
+    }
+
+    return groups;
+  }, [filteredTransactions]);
+
+  // Handle debt settlement
+  const handleSettlement = async () => {
+    if (debtCalculation.netDebt === 0) {
+      alert('Keine Schulden zum Ausgleichen.');
+      return;
+    }
+
+    try {
+      const amount = Math.abs(debtCalculation.netDebt);
+      
+      // If netDebt > 0: Martin owes Hanna
+      // To balance: Create transaction where Hanna owes Martin
+      // If netDebt < 0: Hanna owes Martin
+      // To balance: Create transaction where Martin owes Hanna
+      
+      let payer: 'H' | 'M';
+      let debtor: 'H' | 'M';
+      
+      if (debtCalculation.netDebt > 0) {
+        // Martin owes Hanna → Create: Hanna owes Martin
+        payer = 'M'; // M paid (creditor in description)
+        debtor = 'H'; // H owes (debtor in description)
+      } else {
+        // Hanna owes Martin → Create: Martin owes Hanna
+        payer = 'H'; // H paid (creditor in description)
+        debtor = 'M'; // M owes (debtor in description)
+      }
+
+      // Format amount as German decimal string (with comma)
+      const formattedAmount = amount.toFixed(2).replace('.', ',');
+
+      await addTransaction({
+        type: 'expense',
+        amount: formattedAmount,
+        description: `${payer}+ Schuldenausgleich (${debtor} schuldet ${payer})`,
+        location: 'Ausgleich',
+      });
+
+      setShowSettlementModal(false);
+      console.log('Schuldenausgleich erfolgreich erstellt');
+    } catch (error) {
+      console.error('Error creating settlement:', error);
+      alert('Fehler beim Erstellen des Schuldenausgleichs');
+    }
+  };
 
   // Schulden-Berechnung
   const debtCalculation = useMemo(() => {
@@ -170,6 +243,7 @@ export const HMPage = () => {
     location: string;
     type: 'H' | 'M';
     debtor: 'H' | 'M' | 'none';
+    date: string;
   }) => {
     try {
       let prefixedDescription = '';
@@ -188,7 +262,7 @@ export const HMPage = () => {
         amount: updatedData.amount,
         location: updatedData.location,
         type: 'expense',
-        date: transactionToEdit?.date || new Date().toISOString().split('T')[0]
+        date: updatedData.date
       });
 
       setShowEditModal(false);
@@ -249,6 +323,25 @@ export const HMPage = () => {
     const isH = transaction.description.startsWith('H+');
     const isDebt = transaction.description.includes('schuldet');
     const cleanDescription = transaction.description.replace(/^[HM]\+ /, '').replace(/\(H schuldet M\)/, '').replace(/\(M schuldet H\)/, '');
+    
+    // Determine split type for icon
+    let splitIcon;
+    let splitTooltip;
+    if (isDebt) {
+      splitIcon = (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" />
+        </svg>
+      );
+      splitTooltip = "Schulden - eine Person zahlt alleine";
+    } else {
+      splitIcon = (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        </svg>
+      );
+      splitTooltip = "50/50 - gemeinsame Ausgabe";
+    }
 
     return (
       <div className="group bg-slate-800/30 border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-4 hover:bg-slate-800/50 hover:border-slate-500/30 transition-all duration-200">
@@ -256,13 +349,25 @@ export const HMPage = () => {
           <div className="flex-1 min-w-0 pr-2">
             {/* Mobile: Stack layout, Desktop: Same line */}
             <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-2 mb-2">
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold w-fit ${
-                isH 
-                  ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200' 
-                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'
-              }`}>
-                {isH ? 'H' : 'M'}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold w-fit ${
+                  isH 
+                    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200' 
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'
+                }`}>
+                  {isH ? 'H' : 'M'}
+                </span>
+                <span 
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${
+                    isDebt 
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  }`}
+                  title={splitTooltip}
+                >
+                  {splitIcon}
+                </span>
+              </div>
               <span className="text-slate-400 text-xs">{formatDate(transaction.date)}</span>
             </div>
             
@@ -326,6 +431,43 @@ export const HMPage = () => {
     );
   };
 
+  // Schulden-Übersicht Komponente - kompakt
+  const DebtOverview = () => {
+    if (debtCalculation.totalExpenses === 0) return null;
+
+    return (
+      <div className="bg-slate-800/30 border border-slate-600/20 rounded-lg p-3 sm:p-4 mb-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Schulden-Stand */}
+          <div className={`font-semibold text-sm sm:text-lg flex-1 ${
+            debtCalculation.netDebt > 0 
+              ? 'text-red-400' 
+              : debtCalculation.netDebt < 0 
+                ? 'text-emerald-400'
+                : 'text-slate-300'
+          }`}>
+            {debtCalculation.netDebt === 0 
+              ? 'Ausgeglichen' 
+              : debtCalculation.netDebt > 0 
+                ? `Martin schuldet Hanna ${formatAmount(Math.abs(debtCalculation.netDebt))}`
+                : `Hanna schuldet Martin ${formatAmount(Math.abs(debtCalculation.netDebt))}`
+            }
+          </div>
+
+          {/* Settlement Button */}
+          {debtCalculation.netDebt !== 0 && (
+            <button
+              onClick={() => setShowSettlementModal(true)}
+              className="px-3 sm:px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-500 whitespace-nowrap"
+            >
+              Ausgleichen
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Filter controls - mobile optimized
   const FilterControls = () => (
     <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-row sm:gap-4 sm:items-center sm:justify-between">
@@ -359,47 +501,6 @@ export const HMPage = () => {
       </div>
     </div>
   );
-
-  // Schulden-Übersicht Komponente - kompakt
-  const DebtOverview = () => {
-    if (debtCalculation.totalExpenses === 0) return null;
-
-    return (
-      <div className="bg-slate-800/30 border border-slate-600/20 rounded-lg p-3 sm:p-4 mb-4">
-        <div className="flex items-center justify-between space-x-3">
-          {/* Kompakte Ausgaben-Info */}
-          <div className="flex items-center space-x-2 sm:space-x-4 text-sm">
-            <div className="flex items-center space-x-1">
-              <span className="inline-flex items-center justify-center w-5 h-5 bg-orange-500/20 border border-orange-500/30 rounded text-orange-400 text-xs font-bold">H</span>
-              <span className="text-slate-300 text-xs sm:text-sm">{formatAmount(debtCalculation.hTotal)}</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500/20 border border-red-500/30 rounded text-red-400 text-xs font-bold">M</span>
-              <span className="text-slate-300 text-xs sm:text-sm">{formatAmount(debtCalculation.mTotal)}</span>
-            </div>
-          </div>
-
-          {/* Kompakte Bilanz */}
-          <div className="text-right flex-shrink-0">
-            <div className={`font-semibold text-xs sm:text-base ${
-              debtCalculation.netDebt > 0 
-                ? 'text-red-400' 
-                : debtCalculation.netDebt < 0 
-                  ? 'text-emerald-400'
-                  : 'text-slate-300'
-            }`}>
-              {debtCalculation.netDebt === 0 
-                ? 'Ausgeglichen' 
-                : debtCalculation.netDebt > 0 
-                  ? `Martin schuldet Hanna ${formatAmount(Math.abs(debtCalculation.netDebt))}`
-                  : `Hanna schuldet Martin ${formatAmount(Math.abs(debtCalculation.netDebt))}`
-              }
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-2 sm:pt-4 pb-4 sm:pb-8">
@@ -445,10 +546,10 @@ export const HMPage = () => {
       {/* Schulden-Übersicht */}
       <DebtOverview />
 
-      {/* Transaction List */}
-      <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-6 shadow-xl">
-        <div className="space-y-2 sm:space-y-3">
-          {filteredTransactions.length === 0 ? (
+      {/* Transaction List with Settlement Groups */}
+      <div className="space-y-6">
+        {filteredTransactions.length === 0 ? (
+          <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-6 shadow-xl">
             <div className="text-center py-12 text-slate-400">
               <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -456,12 +557,48 @@ export const HMPage = () => {
               <p className="text-lg font-medium mb-2">Keine Transaktionen gefunden</p>
               <p className="text-sm">Versuchen Sie, Ihre Filter anzupassen oder eine neue Ausgabe hinzuzufügen</p>
             </div>
-          ) : (
-            filteredTransactions.map(transaction => (
-              <TransactionCard key={transaction.id} transaction={transaction} />
-            ))
-          )}
-        </div>
+          </div>
+        ) : (
+          transactionGroups.map((group, groupIndex) => (
+            <div key={groupIndex}>
+              {/* Settlement Divider */}
+              {group.settlement && (
+                <div className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 rounded-lg p-3 sm:p-4 mb-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-emerald-300">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="font-semibold text-sm sm:text-base">
+                        {group.settlement.description.replace(/^[HM]\+ /, '')} - {formatDate(group.settlement.date)}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteTransaction(group.settlement!.id)}
+                      className="p-1.5 text-emerald-300 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-200"
+                      title="Ausgleich löschen"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Transactions in this period */}
+              {group.transactions.length > 0 && (
+                <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-6 shadow-xl">
+                  <div className="space-y-2 sm:space-y-3">
+                    {group.transactions.map(transaction => (
+                      <TransactionCard key={transaction.id} transaction={transaction} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* Modals */}
@@ -487,6 +624,21 @@ export const HMPage = () => {
         onConfirm={confirmDeleteTransaction}
         onCancel={cancelDeleteTransaction}
         isDestructive={true}
+      />
+
+      <ConfirmModal
+        isOpen={showSettlementModal}
+        title="Schuldenausgleich"
+        message={`Möchten Sie die aktuellen Schulden ausgleichen?\n\n${
+          debtCalculation.netDebt > 0 
+            ? `Martin zahlt Hanna ${formatAmount(Math.abs(debtCalculation.netDebt))}`
+            : `Hanna zahlt Martin ${formatAmount(Math.abs(debtCalculation.netDebt))}`
+        }\n\nDies erstellt eine Ausgleichstransaktion und markiert den Zeitpunkt des Ausgleichs.`}
+        confirmText="Ausgleichen"
+        cancelText="Abbrechen"
+        onConfirm={handleSettlement}
+        onCancel={() => setShowSettlementModal(false)}
+        isDestructive={false}
       />
     </div>
   );
