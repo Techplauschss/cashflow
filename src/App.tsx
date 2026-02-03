@@ -165,11 +165,11 @@ function App() {
     setShowAddModal(true);
   };
 
-  const saveNewTransaction = async (newTransactionData: { type: 'income' | 'expense'; amount: string; description: string; location: string; date: string; timestamp: number; isBusiness?: boolean; }) => {
+  const saveNewTransaction = async (newTransactionData: { type: 'income' | 'expense'; amount: number; description: string; location: string; date: string; timestamp: number; isBusiness?: boolean; }) => {
     try {
       await addTransaction({
         ...newTransactionData,
-        amount: newTransactionData.amount,
+        amount: newTransactionData.amount.toString(),
         isBusiness: newTransactionData.isBusiness ?? false,
       });
       window.location.reload(); // TODO: Replace with a more elegant state update
