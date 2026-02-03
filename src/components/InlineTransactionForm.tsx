@@ -14,14 +14,18 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
   const [type, setType] = useState<'E' | 'A'>('A'); // E = Einnahme, A = Ausgabe
   const [isBusiness, setIsBusiness] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    setDescription(prefilledData.description || '');
-    setAmount(prefilledData.amount ? String(prefilledData.amount) : '');
-    setLocation(prefilledData.location || '');
-    setType((prefilledData.type as any) === 'income' ? 'E' : 'A');
-    setIsBusiness(prefilledData.isBusiness || false);
-  }, [prefilledData]);
+    if (!isInitialized && prefilledData && Object.keys(prefilledData).length > 0) {
+      setDescription(prefilledData.description || '');
+      setAmount(prefilledData.amount ? String(prefilledData.amount) : '');
+      setLocation(prefilledData.location || '');
+      setType((prefilledData.type as any) === 'income' ? 'E' : 'A');
+      setIsBusiness(prefilledData.isBusiness || false);
+      setIsInitialized(true);
+    }
+  }, [prefilledData, isInitialized]);
 
   const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
@@ -41,21 +45,29 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
     }
   };
 
-  const formatAmount = (value: string): string => {
-    const cleanValue = value.replace(/\./g, '');
-    const parts = cleanValue.split(',');
-    const integerPart = parts[0];
-    let decimalPart = parts[1];
-    if (decimalPart && decimalPart.length > 2) {
-      decimalPart = decimalPart.substring(0, 2);
-    }
-    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger;
-  };
-
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formattedValue = formatAmount(e.target.value);
-    setAmount(formattedValue);
+    let value = e.target.value;
+    
+    // Erlaube nur Zahlen, Komma und Punkt
+    value = value.replace(/[^\d,\.]/g, '');
+    
+    // Ersetze Punkte durch Kommas (für Dezimaltrennzeichen)
+    value = value.replace(/\./g, ',');
+    
+    // Erlaube nur ein Komma
+    const commaCount = (value.match(/,/g) || []).length;
+    if (commaCount > 1) {
+      const firstCommaIndex = value.indexOf(',');
+      value = value.substring(0, firstCommaIndex + 1) + value.substring(firstCommaIndex + 1).replace(/,/g, '');
+    }
+    
+    // Begrenze Dezimalstellen auf 2
+    const parts = value.split(',');
+    if (parts[1] && parts[1].length > 2) {
+      value = parts[0] + ',' + parts[1].substring(0, 2);
+    }
+    
+    setAmount(value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

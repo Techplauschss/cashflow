@@ -1,18 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Transaction } from '../types/Transaction';
 
-type NewTransactionData = {
-  type: 'income' | 'expense';
-  amount: string; // String für Form-Daten
-  description: string;
-  location: string;
-  date: string;
-  timestamp: number;
-  kilometerstand?: number;
-  liter?: number;
-  isPlanned?: boolean;
-  isBusiness?: boolean;
-};
+type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean };
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -37,7 +26,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setDescription(prefilledData.description || '');
-      setAmount(prefilledData.amount ? String(prefilledData.amount) : '');
+      setAmount(prefilledData.amount ? Math.abs(prefilledData.amount).toFixed(2).replace('.', ',') : '');
       setLocation(prefilledData.location || '');
       setType(prefilledData.type || 'expense');
       setDate(prefilledData.date || new Date().toISOString().split('T')[0]);
@@ -47,10 +36,52 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Keine Beschränkungen für das Betrag-Feld
+  const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const allowedKeys = [
+      'Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 
+      'ArrowUp', 'ArrowDown', 'Home', 'End'
+    ];
+    
+    const isNumber = /^[0-9]$/.test(e.key);
+    const isCommaOrDot = e.key === ',' || e.key === '.';
+    const isAllowedKey = allowedKeys.includes(e.key);
+    const isCtrlA = e.ctrlKey && e.key === 'a';
+    const isCtrlC = e.ctrlKey && e.key === 'c';
+    const isCtrlV = e.ctrlKey && e.key === 'v';
+    const isCtrlX = e.ctrlKey && e.key === 'x';
+    
+    if (!isNumber && !isCommaOrDot && !isAllowedKey && !isCtrlA && !isCtrlC && !isCtrlV && !isCtrlX) {
+      e.preventDefault();
+    }
+  };
+
+  const formatAmount = (value: string): string => {
+    // Entferne alle Zeichen außer Zahlen, Komma und Punkt
+    let cleanValue = value.replace(/[^\d,\.]/g, '');
+    
+    // Entferne alle Punkte (Tausender-Trennzeichen)
+    cleanValue = cleanValue.replace(/\./g, '');
+    
+    // Stelle sicher, dass es nur ein Komma gibt
+    const parts = cleanValue.split(',');
+    let integerPart = parts[0] || '';
+    let decimalPart = parts[1] || '';
+    
+    // Begrenze Dezimalstellen auf 2
+    if (decimalPart.length > 2) {
+      decimalPart = decimalPart.substring(0, 2);
+    }
+    
+    // Füge Tausender-Trennzeichen hinzu
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    // Gebe das formatierte Ergebnis zurück
+    return decimalPart ? `${formattedInteger},${decimalPart}` : formattedInteger;
+  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAmount(e.target.value);
+    const formatted = formatAmount(e.target.value);
+    setAmount(formatted);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -61,16 +92,16 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       return;
     }
 
-    // Überprüfe, ob der Betrag eine gültige Zahl ist
-    const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (isNaN(numericAmount)) {
+    const numericAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'));
+    
+    if (isNaN(numericAmount) || numericAmount <= 0) {
       alert('Bitte geben Sie einen gültigen Betrag ein.');
       return;
     }
 
     onSave({
       description: description.trim(),
-      amount: amount.trim(), // Sende als String
+      amount: numericAmount,
       location: location.trim() || 'Unbekannt',
       type,
       date,
@@ -141,6 +172,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 type="text"
                 value={amount}
                 onChange={handleAmountChange}
+                onKeyDown={handleAmountKeyDown}
                 className="w-full pl-8 pr-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="0,00"
                 required
