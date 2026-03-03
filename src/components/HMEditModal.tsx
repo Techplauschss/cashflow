@@ -94,7 +94,11 @@ export const HMEditModal: React.FC<HMEditModalProps> = ({
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
+    let newValue = e.target.value;
+    // Erlaube Eingabe von Punkt als Komma (für Numpad)
+    if (newValue.endsWith('.')) {
+      newValue = newValue.slice(0, -1) + ',';
+    }
     const formattedValue = formatAmount(newValue);
     setAmount(formattedValue);
   };

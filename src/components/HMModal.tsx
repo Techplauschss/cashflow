@@ -16,8 +16,7 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
-  const [type, setType] = useState<'H' | 'M'>('H');
-  const [debtor, setDebtor] = useState<'H' | 'M' | 'none'>('none');
+  const [debtor, setDebtor] = useState<'H' | 'M'>('H');
   const [isLoading, setIsLoading] = useState(false);
 
   const formatAmount = (value: string): string => {
@@ -42,7 +41,11 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
+    let inputValue = e.target.value;
+    // Erlaube Eingabe von Punkt als Komma (für Numpad)
+    if (inputValue.endsWith('.')) {
+      inputValue = inputValue.slice(0, -1) + ',';
+    }
     const formattedValue = formatAmount(inputValue);
     setAmount(formattedValue);
   };
@@ -81,6 +84,9 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
       // Konvertiere den Betrag zurück zu einer Zahl
       const numericAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'));
       
+      // Wer schuldet wem bestimmt wer bezahlt hat (Gegenteil)
+      const type = debtor === 'H' ? 'M' : 'H';
+
       await onSave({
         description: description.trim(),
         amount: numericAmount,
@@ -93,8 +99,7 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
       setDescription('');
       setAmount('');
       setLocation('');
-      setType('H');
-      setDebtor('none');
+      setDebtor('H');
       
       onClose();
     } catch (error) {
@@ -139,46 +144,12 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-          {/* H/M Category Selection */}
-          <div className={`${debtor !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <label className="block text-sm font-medium text-slate-300 mb-2 sm:mb-3">
-              Wer hat bezahlt?
-            </label>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 bg-slate-700/30 rounded-lg p-1.5 sm:p-2">
-              <button
-                type="button"
-                onClick={() => debtor === 'none' && setType('H')}
-                disabled={debtor !== 'none'}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
-                  type === 'H' && debtor === 'none'
-                    ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg transform scale-[1.02]'
-                    : 'text-orange-300 hover:text-orange-200 hover:bg-orange-900/20'
-                } ${debtor !== 'none' ? 'cursor-not-allowed' : ''}`}
-              >
-                <span>H</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => debtor === 'none' && setType('M')}
-                disabled={debtor !== 'none'}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
-                  type === 'M' && debtor === 'none'
-                    ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg transform scale-[1.02]'
-                    : 'text-red-300 hover:text-red-200 hover:bg-red-900/20'
-                } ${debtor !== 'none' ? 'cursor-not-allowed' : ''}`}
-              >
-                <span>M</span>
-              </button>
-            </div>
-            {debtor !== 'none' && <p className="text-xs text-slate-500 mt-1">Wird durch "Wer schuldet wem?" bestimmt.</p>}
-          </div>
-
           {/* Debtor Selection */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 sm:mb-3">
               Wer schuldet wem?
             </label>
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 bg-slate-700/30 rounded-lg p-1.5 sm:p-2">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 bg-slate-700/30 rounded-lg p-1.5 sm:p-2">
               <button
                 type="button"
                 onClick={() => setDebtor('H')}
@@ -200,17 +171,6 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
                 }`}
               >
                 <span>M schuldet H</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDebtor('none')}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center ${
-                  debtor === 'none'
-                    ? 'bg-slate-600 text-white shadow-lg transform scale-[1.02]'
-                    : 'text-slate-300 hover:text-slate-200 hover:bg-slate-900/20'
-                }`}
-              >
-                <span>Keine Schulden</span>
               </button>
             </div>
           </div>

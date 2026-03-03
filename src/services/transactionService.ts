@@ -32,6 +32,11 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
   }
 };
 
+// Hilfsfunktion zum Prüfen auf H+M Transaktionen
+export const isHMTransaction = (description: string): boolean => {
+  return description.startsWith('H+') || description.startsWith('M+');
+};
+
 // Funktion zum Abrufen aller Transaktionen (ohne geplante)
 export const subscribeToTransactions = (callback: (transactions: Transaction[]) => void): (() => void) => {
   const transactionsRef = ref(database, 'transactions');
@@ -58,7 +63,7 @@ export const subscribeToTransactions = (callback: (transactions: Transaction[]) 
 };
 
 // Funktion zum Abrufen von Transaktionen für einen bestimmten Monat (ohne geplante)
-export const getTransactionsForMonth = async (year: number, month: number): Promise<Transaction[]> => {
+export const getTransactionsForMonth = async (year: number, month: number, includeHM: boolean = false): Promise<Transaction[]> => {
   const transactionsRef = ref(database, 'transactions');
   
   // Erstelle Start- und Enddatum für den Monat
@@ -91,8 +96,8 @@ export const getTransactionsForMonth = async (year: number, month: number): Prom
         const transactions: Transaction[] = allTransactions
           .filter(transaction => !transaction.isPlanned) // Filtere geplante Transaktionen aus
           .filter(transaction => 
-            !transaction.description.startsWith('H+') && !transaction.description.startsWith('M+')
-          ); // Filtere H+M Transaktionen aus
+            includeHM || !isHMTransaction(transaction.description)
+          ); // Filtere H+M Transaktionen aus (außer explizit gewünscht)
         
         console.log(`✅ [getTransactionsForMonth] Transactions after filtering (${transactions.length}):`, transactions);
         resolve(transactions);
@@ -108,7 +113,7 @@ export const getTransactionsForMonth = async (year: number, month: number): Prom
 };
 
 // Funktion zum Abrufen aller verfügbaren Monate (nur Metadaten)
-export const getAvailableMonths = async (): Promise<Array<{ year: number; month: number; monthYear: string; count: number }>> => {
+export const getAvailableMonths = async (includeHM: boolean = false): Promise<Array<{ year: number; month: number; monthYear: string; count: number }>> => {
   const transactionsRef = ref(database, 'transactions');
   
   return new Promise((resolve, reject) => {
@@ -122,7 +127,7 @@ export const getAvailableMonths = async (): Promise<Array<{ year: number; month:
         
         // Filtere H+M Transaktionen aus (basierend auf Description)
         const filteredTransactions = transactions.filter(transaction => 
-          !transaction.description.startsWith('H+') && !transaction.description.startsWith('M+')
+          includeHM || !isHMTransaction(transaction.description)
         );
         
         // Gruppiere nach Monat und zähle

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
 import { HMModal } from './HMModal';
 import { HMEditModal } from './HMEditModal';
 import { DropdownMenu } from './DropdownMenu';
@@ -15,7 +16,6 @@ export const HMPage = () => {
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [allHMTransactions, setAllHMTransactions] = useState<Transaction[]>([]);
-  const [showSettlementModal, setShowSettlementModal] = useState(false);
   
   // State for filtering functionality
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('all');
@@ -29,7 +29,12 @@ export const HMPage = () => {
       );
       
       // Sortiere alle H+M Transaktionen nach Datum
-      const sortedTransactions = hmTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const sortedTransactions = hmTransactions.sort((a, b) => {
+        const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateCompare !== 0) return dateCompare;
+        // Bei gleichem Datum: Neueste Erstellung zuerst (basierend auf Timestamp)
+        return (b.timestamp || 0) - (a.timestamp || 0);
+      });
       
       setAllHMTransactions(sortedTransactions);
     });
@@ -76,127 +81,33 @@ export const HMPage = () => {
     return filtered;
   }, [allHMTransactions, filterPeriod, searchTerm]);
 
-  // Group transactions by settlement periods
-  const transactionGroups = useMemo(() => {
-    const groups: { settlement: Transaction | null; transactions: Transaction[] }[] = [];
-    
-    let currentGroup: Transaction[] = [];
+  // Calculate debt summary
+  const debtSummary = useMemo(() => {
+    let netDebt = 0; // > 0: Hanna owes Martin, < 0: Martin owes Hanna
+    let hPaid = 0;
+    let mPaid = 0;
 
-    filteredTransactions.forEach((transaction) => {
-      if (transaction.description.includes('Schuldenausgleich')) {
-        // Found a settlement - close current group and start new one
-        if (currentGroup.length > 0) {
-          groups.push({ settlement: null, transactions: currentGroup });
+    filteredTransactions.forEach(t => {
+      const amount = Math.abs(t.amount);
+      
+      if (t.description.startsWith('H+')) {
+        hPaid += amount;
+        if (t.description.includes('M schuldet H')) {
+          netDebt -= amount; // Martin owes Hanna full amount
+        } else {
+          netDebt -= amount / 2; // Martin owes Hanna half
         }
-        groups.push({ settlement: transaction, transactions: [] });
-        currentGroup = [];
-      } else {
-        currentGroup.push(transaction);
+      } else if (t.description.startsWith('M+')) {
+        mPaid += amount;
+        if (t.description.includes('H schuldet M')) {
+          netDebt += amount; // Hanna owes Martin full amount
+        } else {
+          netDebt += amount / 2; // Hanna owes Martin half
+        }
       }
     });
 
-    // Add remaining transactions
-    if (currentGroup.length > 0) {
-      groups.push({ settlement: null, transactions: currentGroup });
-    }
-
-    return groups;
-  }, [filteredTransactions]);
-
-  // Handle debt settlement
-  const handleSettlement = async () => {
-    if (debtCalculation.netDebt === 0) {
-      alert('Keine Schulden zum Ausgleichen.');
-      return;
-    }
-
-    try {
-      const amount = Math.abs(debtCalculation.netDebt);
-      
-      // If netDebt > 0: Martin owes Hanna
-      // To balance: Create transaction where Hanna owes Martin
-      // If netDebt < 0: Hanna owes Martin
-      // To balance: Create transaction where Martin owes Hanna
-      
-      let payer: 'H' | 'M';
-      let debtor: 'H' | 'M';
-      
-      if (debtCalculation.netDebt > 0) {
-        // Martin owes Hanna → Create: Hanna owes Martin
-        payer = 'M'; // M paid (creditor in description)
-        debtor = 'H'; // H owes (debtor in description)
-      } else {
-        // Hanna owes Martin → Create: Martin owes Hanna
-        payer = 'H'; // H paid (creditor in description)
-        debtor = 'M'; // M owes (debtor in description)
-      }
-
-      // Format amount as German decimal string (with comma)
-      const formattedAmount = amount.toFixed(2).replace('.', ',');
-
-      await addTransaction({
-        type: 'expense',
-        amount: formattedAmount,
-        description: `${payer}+ Schuldenausgleich (${debtor} schuldet ${payer})`,
-        location: 'Ausgleich',
-      });
-
-      setShowSettlementModal(false);
-      console.log('Schuldenausgleich erfolgreich erstellt');
-    } catch (error) {
-      console.error('Error creating settlement:', error);
-      alert('Fehler beim Erstellen des Schuldenausgleichs');
-    }
-  };
-
-  // Schulden-Berechnung
-  const debtCalculation = useMemo(() => {
-    const sharedTransactions = filteredTransactions.filter(t => !t.description.includes('schuldet'));
-    const debtTransactions = filteredTransactions.filter(t => t.description.includes('schuldet'));
-
-    const hSharedTotal = sharedTransactions
-      .filter(t => t.description.startsWith('H+'))
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const mSharedTotal = sharedTransactions
-      .filter(t => t.description.startsWith('M+'))
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const totalSharedExpenses = hSharedTotal + mSharedTotal;
-    const halfSharedTotal = totalSharedExpenses / 2;
-
-    const martinPaidShared = hSharedTotal;
-    
-    // This is the debt from the 50/50 split
-    let martinOwes = halfSharedTotal - martinPaidShared;
-
-    // Now add the explicit debts
-    debtTransactions.forEach(t => {
-        if (t.description.includes('H schuldet M')) { // H owes M, M paid
-            martinOwes += t.amount;
-        } else if (t.description.includes('M schuldet H')) { // M owes H, H paid
-            martinOwes -= t.amount;
-        }
-    });
-
-    const netDebt = -martinOwes; // Positiv = Hanna schuldet Martin, Negativ = Martin schuldet Hanna
-
-    const hTotal = filteredTransactions
-      .filter(t => t.description.startsWith('H+'))
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const mTotal = filteredTransactions
-      .filter(t => t.description.startsWith('M+'))
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    return {
-      hTotal,
-      mTotal,
-      totalExpenses: hTotal + mTotal,
-      martinPaid: hTotal, // This is not just martinPaid anymore, it's H's total payment
-      hannaPaid: mTotal, // M's total payment
-      netDebt
-    };
+    return { netDebt, hPaid, mPaid };
   }, [filteredTransactions]);
 
   const handleSave = async (data: {
@@ -220,7 +131,7 @@ export const HMPage = () => {
       
       await addTransaction({
         type: 'expense',
-        amount: data.amount.toString(),
+        amount: data.amount.toFixed(2).replace('.', ','),
         description: prefixedDescription,
         location: data.location,
       });
@@ -352,11 +263,89 @@ export const HMPage = () => {
     });
   };
 
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(20);
+    doc.text('H+M Abrechnung', 14, 22);
+    
+    // Info
+    doc.setFontSize(11);
+    doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, 30);
+    
+    const debtText = debtSummary.netDebt === 0 
+      ? 'Alles ausgeglichen'
+      : debtSummary.netDebt > 0 
+        ? `Hanna schuldet Martin ${formatAmount(debtSummary.netDebt).replace('€', 'EUR')}`
+        : `Martin schuldet Hanna ${formatAmount(Math.abs(debtSummary.netDebt)).replace('€', 'EUR')}`;
+        
+    doc.text(`Status: ${debtText}`, 14, 38);
+    doc.text(`Gesamt Hanna: ${formatAmount(debtSummary.hPaid).replace('€', 'EUR')} | Gesamt Martin: ${formatAmount(debtSummary.mPaid).replace('€', 'EUR')}`, 14, 46);
+
+    // Simple list generation (fallback without autoTable)
+    let yPos = 60;
+    doc.setFontSize(10);
+    
+    // Header
+    doc.setFillColor(234, 88, 12); // Orange background
+    doc.rect(14, yPos - 5, 182, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Datum       Beschreibung                         Ort                Betrag      Wer", 16, yPos);
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    yPos += 10;
+
+    filteredTransactions.forEach(t => {
+      if (yPos > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      const isH = t.description.startsWith('H+');
+      const cleanDesc = t.description
+        .replace(/^[HM]\+ /, '')
+        .replace(/\(H schuldet M\)/, '')
+        .replace(/\(M schuldet H\)/, '')
+        .substring(0, 35); // Truncate description
+      
+      const dateStr = new Date(t.date).toLocaleDateString('de-DE');
+      const amountStr = formatAmount(t.amount).replace('€', 'EUR');
+      const whoStr = isH ? 'Hanna' : 'Martin';
+      const locStr = t.location.substring(0, 15);
+
+      // Manual column alignment
+      doc.text(dateStr, 16, yPos);
+      doc.text(cleanDesc, 40, yPos);
+      doc.text(locStr, 110, yPos);
+      doc.text(amountStr, 150, yPos);
+      doc.text(whoStr, 180, yPos);
+      
+      yPos += 7;
+    });
+
+    doc.save(`hm-abrechnung-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   // Transaction card component - mobile optimized
   const TransactionCard = ({ transaction }: { transaction: Transaction }) => {
     const isH = transaction.description.startsWith('H+');
     const isDebt = transaction.description.includes('schuldet');
-    const cleanDescription = transaction.description.replace(/^[HM]\+ /, '').replace(/\(H schuldet M\)/, '').replace(/\(M schuldet H\)/, '');
+    
+    let debtLabel = '';
+    if (transaction.description.includes('H schuldet M')) {
+      debtLabel = 'Hanna schuldet Martin';
+    } else if (transaction.description.includes('M schuldet H')) {
+      debtLabel = 'Martin schuldet Hanna';
+    }
+
+    const cleanDescription = transaction.description
+      .replace(/^[HM]\+ /, '')
+      .replace(/\(H schuldet M\)/, '')
+      .replace(/\(M schuldet H\)/, '')
+      .trim();
     
     // Determine split type for icon
     let splitIcon;
@@ -406,7 +395,7 @@ export const HMPage = () => {
             </div>
             
             <h3 className="text-white font-medium text-sm sm:text-base mb-1 break-words leading-relaxed">
-              {isDebt && <span className="text-blue-400 font-semibold">Schulden: </span>}
+              {isDebt && <span className="text-blue-400 font-semibold text-xs block mb-0.5">{debtLabel || 'Schulden'}</span>}
               {cleanDescription}
             </h3>
             
@@ -475,43 +464,6 @@ export const HMPage = () => {
     );
   };
 
-  // Schulden-Übersicht Komponente - kompakt
-  const DebtOverview = () => {
-    if (debtCalculation.totalExpenses === 0) return null;
-
-    return (
-      <div className="bg-slate-800/30 border border-slate-600/20 rounded-lg p-3 sm:p-4 mb-4">
-        <div className="flex items-center justify-between gap-4">
-          {/* Schulden-Stand */}
-          <div className={`font-semibold text-sm sm:text-lg flex-1 ${
-            debtCalculation.netDebt > 0 
-              ? 'text-red-400' 
-              : debtCalculation.netDebt < 0 
-                ? 'text-emerald-400'
-                : 'text-slate-300'
-          }`}>
-            {debtCalculation.netDebt === 0 
-              ? 'Ausgeglichen' 
-              : debtCalculation.netDebt > 0 
-                ? `Martin schuldet Hanna ${formatAmount(Math.abs(debtCalculation.netDebt))}`
-                : `Hanna schuldet Martin ${formatAmount(Math.abs(debtCalculation.netDebt))}`
-            }
-          </div>
-
-          {/* Settlement Button */}
-          {debtCalculation.netDebt !== 0 && (
-            <button
-              onClick={() => setShowSettlementModal(true)}
-              className="px-3 sm:px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-500 whitespace-nowrap"
-            >
-              Ausgleichen
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   // Filter controls - mobile optimized
   const FilterControls = () => (
     <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-row sm:gap-4 sm:items-center sm:justify-between">
@@ -559,26 +511,67 @@ export const HMPage = () => {
           
           <div className="w-16 sm:w-20 h-1 bg-gradient-to-r from-orange-400 to-red-400 mx-auto mb-4 sm:mb-8 opacity-60 rounded-full"></div>
           
-          {/* Add Transaction Button */}
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-900 shadow-lg text-sm sm:text-base"
-          >
-            <svg 
-              className="w-4 h-4 sm:w-5 sm:h-5 mr-2" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
+          {/* Debt Summary */}
+          <div className="mb-6 sm:mb-8 p-4 bg-slate-800/50 rounded-xl border border-white/5">
+            <div className="text-slate-400 text-sm mb-1">Aktueller Stand</div>
+            <div className={`text-xl sm:text-2xl font-bold ${
+              Math.abs(debtSummary.netDebt) < 0.01 
+                ? 'text-slate-200' 
+                : debtSummary.netDebt > 0 
+                  ? 'text-emerald-400' 
+                  : 'text-red-400'
+            }`}>
+              {Math.abs(debtSummary.netDebt) < 0.01 
+                ? 'Alles ausgeglichen' 
+                : debtSummary.netDebt > 0 
+                  ? `Hanna schuldet Martin ${formatAmount(debtSummary.netDebt)}`
+                  : `Martin schuldet Hanna ${formatAmount(debtSummary.netDebt)}`
+              }
+            </div>
+            <div className="flex justify-center gap-8 mt-4 text-xs sm:text-sm text-slate-400">
+              <div>
+                <span className="block text-orange-400 font-semibold">{formatAmount(debtSummary.hPaid)}</span>
+                <span>Hanna bezahlt</span>
+              </div>
+              <div>
+                <span className="block text-red-400 font-semibold">{formatAmount(debtSummary.mPaid)}</span>
+                <span>Martin bezahlt</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-900 shadow-lg text-sm sm:text-base"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M12 4v16m8-8H4" 
-              />
-            </svg>
-            Neue Ausgabe
-          </button>
+              <svg 
+                className="w-4 h-4 sm:w-5 sm:h-5 mr-2" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M12 4v16m8-8H4" 
+                />
+              </svg>
+              Neue Ausgabe
+            </button>
+
+            <button
+              onClick={handleExportPDF}
+              className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 shadow-lg text-sm sm:text-base"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              PDF Export
+            </button>
+          </div>
         </div>
       </div>
 
@@ -586,9 +579,6 @@ export const HMPage = () => {
       <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
         <FilterControls />
       </div>
-
-      {/* Schulden-Übersicht */}
-      <DebtOverview />
 
       {/* Transaction List with Settlement Groups */}
       <div className="space-y-6">
@@ -603,45 +593,13 @@ export const HMPage = () => {
             </div>
           </div>
         ) : (
-          transactionGroups.map((group, groupIndex) => (
-            <div key={groupIndex}>
-              {/* Settlement Divider */}
-              {group.settlement && (
-                <div className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 rounded-lg p-3 sm:p-4 mb-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-emerald-300">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="font-semibold text-sm sm:text-base">
-                        {group.settlement.description.replace(/^[HM]\+ /, '')} - {formatDate(group.settlement.date)}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteTransaction(group.settlement!.id)}
-                      className="p-1.5 text-emerald-300 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-200"
-                      title="Ausgleich löschen"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Transactions in this period */}
-              {group.transactions.length > 0 && (
-                <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-6 shadow-xl">
-                  <div className="space-y-2 sm:space-y-3">
-                    {group.transactions.map(transaction => (
-                      <TransactionCard key={transaction.id} transaction={transaction} />
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-600/20 rounded-lg sm:rounded-xl p-3 sm:p-6 shadow-xl">
+            <div className="space-y-2 sm:space-y-3">
+              {filteredTransactions.map(transaction => (
+                <TransactionCard key={transaction.id} transaction={transaction} />
+              ))}
             </div>
-          ))
+          </div>
         )}
       </div>
 
@@ -670,20 +628,9 @@ export const HMPage = () => {
         isDestructive={true}
       />
 
-      <ConfirmModal
-        isOpen={showSettlementModal}
-        title="Schuldenausgleich"
-        message={`Möchten Sie die aktuellen Schulden ausgleichen?\n\n${
-          debtCalculation.netDebt > 0 
-            ? `Martin zahlt Hanna ${formatAmount(Math.abs(debtCalculation.netDebt))}`
-            : `Hanna zahlt Martin ${formatAmount(Math.abs(debtCalculation.netDebt))}`
-        }\n\nDies erstellt eine Ausgleichstransaktion und markiert den Zeitpunkt des Ausgleichs.`}
-        confirmText="Ausgleichen"
-        cancelText="Abbrechen"
-        onConfirm={handleSettlement}
-        onCancel={() => setShowSettlementModal(false)}
-        isDestructive={false}
-      />
+      <div className="text-center mt-6 text-slate-500 text-xs opacity-50">
+        v1.1
+      </div>
     </div>
   );
 };

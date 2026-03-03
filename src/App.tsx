@@ -1,5 +1,5 @@
 import './styles.css';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
 import { InlineTransactionForm } from './components/InlineTransactionForm';
@@ -52,7 +52,7 @@ function HomePage({
         {/* Footer */}
         <div className="text-center mt-4 sm:mt-8">
           <p className="text-slate-500 text-xs sm:text-sm">
-            © {new Date().getFullYear()} Cashflow Pro
+            © {new Date().getFullYear()} Cashflow Pro (v1.1)
           </p>
         </div>
       </div>
@@ -95,6 +95,9 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTransactionProps, setNewTransactionProps] = useState<Partial<Transaction>>({});
 
+  useEffect(() => {
+    console.log('App Version: 1.1.0 loaded');
+  }, []);
 
   // App-level transaction handlers
   const handleDeleteTransaction = async (transactionId: string) => {
@@ -169,7 +172,7 @@ function App() {
     try {
       await addTransaction({
         ...newTransactionData,
-        amount: newTransactionData.amount.toString(),
+        amount: newTransactionData.amount.toFixed(2).replace('.', ','),
         isBusiness: newTransactionData.isBusiness ?? false,
       });
       window.location.reload(); // TODO: Replace with a more elegant state update

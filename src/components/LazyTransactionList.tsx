@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
-import { getTransactionsForMonth, getAvailableMonths } from '../services/transactionService';
+import { getTransactionsForMonth, getAvailableMonths, isHMTransaction } from '../services/transactionService';
 import { DropdownMenu } from './DropdownMenu';
 
 interface MonthData {
@@ -109,11 +109,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     const hasSprit = lowerDescription.includes('sprit') && !lowerDescription.includes('sprite');
     
     return hasTanken || hasTanke || hasSprit;
-  };
-
-  // Prüft ob eine Transaktion eine H+M-Transaktion ist
-  const isHMTransaction = (description: string): boolean => {
-    return description.startsWith('H+') || description.startsWith('M+');
   };
 
   // Such-Handler

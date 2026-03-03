@@ -65,10 +65,10 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     // Stelle sicher, dass es nur ein Komma gibt
     const parts = cleanValue.split(',');
     let integerPart = parts[0] || '';
-    let decimalPart = parts[1] || '';
+    let decimalPart = parts[1];
     
     // Begrenze Dezimalstellen auf 2
-    if (decimalPart.length > 2) {
+    if (decimalPart !== undefined && decimalPart.length > 2) {
       decimalPart = decimalPart.substring(0, 2);
     }
     
@@ -76,11 +76,16 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     
     // Gebe das formatierte Ergebnis zurück
-    return decimalPart ? `${formattedInteger},${decimalPart}` : formattedInteger;
+    return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger;
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatAmount(e.target.value);
+    let inputValue = e.target.value;
+    // Erlaube Eingabe von Punkt als Komma (für Numpad)
+    if (inputValue.endsWith('.')) {
+      inputValue = inputValue.slice(0, -1) + ',';
+    }
+    const formatted = formatAmount(inputValue);
     setAmount(formatted);
   };
 
