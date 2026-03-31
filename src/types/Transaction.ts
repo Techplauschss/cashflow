@@ -11,6 +11,7 @@ export interface Transaction {
   isPlanned?: boolean; // Optional: Markiert geplante Ausgaben für die Zukunft
   isBusiness?: boolean; // Optional: Markiert Geschäftstransaktionen
   addedToMain?: boolean; // Optional: Markiert ob H+M Transaktion bereits zu Main hinzugefügt wurde
+  isOneTimeInvestment?: boolean; // Optional: Markiert Einmal-Investitionen
 }
 
 export interface TransactionFormData {
@@ -21,4 +22,5 @@ export interface TransactionFormData {
   date?: string; // Optional: für geplante Ausgaben
   isPlanned?: boolean; // Optional: für geplante Ausgaben
   isBusiness?: boolean; // Optional: für Geschäftstransaktionen
+  isOneTimeInvestment?: boolean; // Optional: für Einmal-Investitionen
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Transaction } from '../types/Transaction';
-import { getTransactionsForMonth, getAvailableMonths } from '../services/transactionService';
+import { getTransactionsForMonth, getAvailableMonths, getOneTimeInvestmentsForYear } from '../services/transactionService';
 import { DropdownMenu } from './DropdownMenu';
 import { InlineTransactionForm } from './InlineTransactionForm';
 
@@ -29,6 +29,10 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  
+  const [oneTimeInvestments, setOneTimeInvestments] = useState<Transaction[]>([]);
+  const [isOneTimeExpanded, setIsOneTimeExpanded] = useState(true);
+  const [isLoadingOneTime, setIsLoadingOneTime] = useState(false);
 
 
 
@@ -134,6 +138,42 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
   useEffect(() => {
     loadAvailableMonths();
   }, []);
+
+  // Lade Einzelinvestitionen für die Business-Ansicht
+  const loadOneTimeInvestments = async (year: number | 'all') => {
+    setIsLoadingOneTime(true);
+    try {
+      let investments: Transaction[] = [];
+      if (year === 'all') {
+        const promises = availableYears.map(y => getOneTimeInvestmentsForYear(y));
+        const results = await Promise.all(promises);
+        investments = results.flat();
+      } else {
+        investments = await getOneTimeInvestmentsForYear(year);
+      }
+      const businessInvestments = investments.filter(t => t.isBusiness === true && !isHMTransaction(t.description));
+      setOneTimeInvestments(sortTransactionsByAmount(businessInvestments));
+    } catch (error) {
+      console.error('Error loading one-time investments:', error);
+    } finally {
+      setIsLoadingOneTime(false);
+    }
+  };
+
+  const toggleOneTime = async () => {
+    const newExpandedState = !isOneTimeExpanded;
+    setIsOneTimeExpanded(newExpandedState);
+    if (newExpandedState && oneTimeInvestments.length === 0) {
+      await loadOneTimeInvestments(selectedYear);
+    }
+  };
+
+  useEffect(() => {
+    setIsOneTimeExpanded(true);
+    if (selectedYear !== 'all' || availableYears.length > 0) {
+      loadOneTimeInvestments(selectedYear);
+    }
+  }, [selectedYear, availableYears]);
 
   // Filtere Monate nach ausgewähltem Jahr
   const filteredMonths = selectedYear === 'all' 
@@ -320,6 +360,139 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
               </div>
             ))}
           </div>
+
+          {/* Einzelinvestitionen Section */}
+          {(selectedYear !== 'all' || availableYears.length > 0) && (
+            <div className="mt-6 border-t border-slate-600/30 pt-6">
+              <button
+                onClick={toggleOneTime}
+                className="w-full text-left mb-2 pb-1 transition-colors group flex items-center justify-between"
+              >
+                <h3 className="text-lg font-medium text-purple-300 group-hover:text-purple-200">
+                  Einzelinvestitionen {selectedYear === 'all' ? 'Alle Jahre' : selectedYear}
+                  {oneTimeInvestments && oneTimeInvestments.length > 0 && (
+                    <span className="ml-2 text-sm text-purple-400/70">
+                      ({oneTimeInvestments.length} Transaktionen)
+                    </span>
+                  )}
+                </h3>
+                <div className="text-purple-400/70 flex items-center">
+                  {isLoadingOneTime && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400 mr-2"></div>
+                  )}
+                  <svg
+                    className={`w-5 h-5 transform transition-transform ${
+                      isOneTimeExpanded ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+              
+              {isOneTimeExpanded && (
+                <div className="space-y-3 mt-4">
+                  {isLoadingOneTime ? (
+                    <div className="text-center py-4">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400"></div>
+                        <span className="ml-3 text-slate-400">Lade Investitionen...</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {oneTimeInvestments.length === 0 ? (
+                        <div className="text-center py-4 text-slate-400">
+                          Keine geschäftlichen Einzelinvestitionen gefunden.
+                        </div>
+                      ) : (
+                        <>
+                          {oneTimeInvestments.map((transaction) => (
+                            <div
+                              key={transaction.id}
+                              className="group bg-slate-800/30 border border-slate-600/30 rounded-lg p-4 hover:bg-slate-800/50 transition-all"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-3">
+                                    <h4 className="text-white font-medium text-sm">
+                                      {transaction.description} • {transaction.location}
+                                    </h4>
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                                      B
+                                    </span>
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-600/20 text-purple-300 border border-purple-500/30">
+                                      I
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-slate-400 mt-1">
+                                    {new Date(transaction.date).toLocaleDateString('de-DE')}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className={`text-lg font-semibold ${
+                                    transaction.type === 'income' ? 'text-green-400' : 'text-red-400'
+                                  }`}>
+                                    {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}€
+                                  </div>
+                                </div>
+
+                                {(onEditTransaction || onDeleteTransaction) && (
+                                  <div className="ml-3 opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <DropdownMenu
+                                      trigger={
+                                        <button
+                                          className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 rounded-lg transition-all"
+                                          title="Aktionen"
+                                        >
+                                          <svg
+                                            className="w-4 h-4"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                          </svg>
+                                        </button>
+                                      }
+                                      items={[
+                                        ...(onEditTransaction ? [{
+                                          label: 'Bearbeiten',
+                                          icon: (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                          ),
+                                          onClick: () => onEditTransaction(transaction),
+                                          variant: 'default' as const
+                                        }] : []),
+                                        ...(onDeleteTransaction ? [{
+                                          label: 'Löschen',
+                                          icon: (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          ),
+                                          onClick: () => onDeleteTransaction(transaction.id),
+                                          variant: 'destructive' as const
+                                        }] : [])
+                                      ]}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

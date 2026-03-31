@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Transaction } from '../types/Transaction';
 
-type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean };
+type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean, isOneTimeInvestment?: boolean };
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -22,6 +22,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isBusiness, setIsBusiness] = useState(false);
+  const [isOneTimeInvestment, setIsOneTimeInvestment] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -31,6 +32,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       setType(prefilledData.type || 'expense');
       setDate(prefilledData.date || new Date().toISOString().split('T')[0]);
       setIsBusiness(prefilledData.isBusiness || false);
+      setIsOneTimeInvestment(prefilledData.isOneTimeInvestment || false);
     }
   }, [isOpen, prefilledData]);
 
@@ -111,6 +113,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       type,
       date,
       isBusiness,
+      isOneTimeInvestment,
       timestamp: Date.now(),
     });
   };
@@ -213,23 +216,45 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               />
             </div>
 
-            {/* Business Toggle */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Transaktionstyp
-              </label>
-              <button
-                type="button"
-                onClick={() => setIsBusiness(!isBusiness)}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isBusiness
-                    ? 'bg-blue-600 text-white border border-blue-500'
-                    : 'bg-slate-700/50 text-slate-300 border border-slate-600/30 hover:bg-slate-600/50'
-                }`}
-              >
-                <span className="font-bold">B</span>
-                <span>{isBusiness ? 'Geschäftstransaktion' : 'Private Transaktion'}</span>
-              </button>
+            {/* Toggles für Business und Einmal-Investition */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Business Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Geschäftlich
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsBusiness(!isBusiness)}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    isBusiness
+                      ? 'bg-blue-600 text-white border border-blue-500'
+                      : 'bg-slate-700/50 text-slate-300 border border-slate-600/30 hover:bg-slate-600/50'
+                  }`}
+                >
+                  <span className="font-bold">B</span>
+                  <span>{isBusiness ? 'Geschäftstransaktion' : 'Privat'}</span>
+                </button>
+              </div>
+
+              {/* Einmal-Investition Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Investition
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsOneTimeInvestment(!isOneTimeInvestment)}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    isOneTimeInvestment
+                      ? 'bg-purple-600 text-white border border-purple-500'
+                      : 'bg-slate-700/50 text-slate-300 border border-slate-600/30 hover:bg-slate-600/50'
+                  }`}
+                >
+                  <span className="font-bold">I</span>
+                  <span>{isOneTimeInvestment ? 'Einmal-Investition' : 'Normal'}</span>
+                </button>
+              </div>
             </div>
 
             {/* Date */}

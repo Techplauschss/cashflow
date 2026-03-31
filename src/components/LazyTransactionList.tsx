@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
-import { getTransactionsForMonth, getAvailableMonths, isHMTransaction } from '../services/transactionService';
+import { getTransactionsForMonth, getAvailableMonths, isHMTransaction, getOneTimeInvestmentsForYear } from '../services/transactionService';
 import { DropdownMenu } from './DropdownMenu';
 
 interface MonthData {
@@ -34,6 +34,9 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [searchLoadingMonths, setSearchLoadingMonths] = useState<Set<string>>(new Set());
   const [showOnlyBusiness] = useState(false);
+  const [oneTimeInvestments, setOneTimeInvestments] = useState<Transaction[]>([]);
+  const [isOneTimeExpanded, setIsOneTimeExpanded] = useState(false);
+  const [isLoadingOneTime, setIsLoadingOneTime] = useState(false);
 
   // Aktuelles Datum für Filter
   const currentDate = new Date();
@@ -190,6 +193,28 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     filterMonthsByYear(allMonths, year);
     setSearchTerm('');
     setActiveSearchTerm('');
+  };
+
+  // Lade Einmal-Investitionen für ein Jahr
+  const loadOneTimeInvestmentsForYear = async (year: number) => {
+    setIsLoadingOneTime(true);
+    try {
+      const investments = await getOneTimeInvestmentsForYear(year);
+      setOneTimeInvestments(investments);
+    } catch (error) {
+      console.error('Error loading one-time investments:', error);
+    } finally {
+      setIsLoadingOneTime(false);
+    }
+  };
+
+  // Einmal-Investitionen ein-/ausklappen
+  const toggleOneTime = async () => {
+    const newExpandedState = !isOneTimeExpanded;
+    setIsOneTimeExpanded(newExpandedState);
+    if (newExpandedState && oneTimeInvestments.length === 0) {
+      await loadOneTimeInvestmentsForYear(selectedYear);
+    }
   };
 
   // Lade Transaktionen für einen Monat
@@ -377,6 +402,9 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     
     // Lade die verfügbaren Monate neu
     await loadAvailableMonths();
+    if (isOneTimeExpanded) {
+      await loadOneTimeInvestmentsForYear(selectedYear);
+    }
     console.log('✅ [refreshData] Refresh complete');
   };
 
@@ -393,8 +421,117 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   useEffect(() => {
     if (allMonths.length > 0) {
       filterMonthsByYear(allMonths, selectedYear);
+      setIsOneTimeExpanded(false);
+      setOneTimeInvestments([]);
     }
   }, [selectedYear, allMonths]);
+
+  // Helper to render a single transaction
+  const renderTransaction = (transaction: Transaction) => {
+    const isTanken = isTankenTransaction(transaction.description, transaction.type);
+    
+    return (
+      <div
+        key={transaction.id}
+        className={`group bg-slate-800/30 border border-slate-600/30 rounded-lg p-2 sm:p-3 hover:bg-slate-800/50 transition-all relative ${
+          deletingTransactions.has(transaction.id) ? 'opacity-60' : ''
+        }`}
+      >
+        {/* Loading Overlay */}
+        {deletingTransactions.has(transaction.id) && (
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
+            <div className="flex flex-col items-center gap-2">
+              <svg className="w-8 h-8 animate-spin text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="text-sm font-medium text-blue-300">Wird gelöscht...</span>
+            </div>
+          </div>
+        )}
+        
+        <div className="flex items-start sm:items-center">
+          <div className="flex-1 min-w-0">
+            <div>
+              <h3 className="text-white font-medium text-sm md:text-base break-words flex items-center gap-1">
+                {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                {/* Business-Indikator */}
+                {transaction.isBusiness && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                    B
+                  </span>
+                )}
+                {/* Einmal-Investition-Indikator */}
+                {transaction.isOneTimeInvestment && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-600/20 text-purple-300 border border-purple-500/30">
+                    I
+                  </span>
+                )}
+                {/* Kilometerstand und Liter-Anzeige für Tanken-Transaktionen */}
+                {isTanken && (transaction.kilometerstand || transaction.liter) && (
+                  <div className="flex items-center gap-1">
+                    {transaction.kilometerstand && (
+                      <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        {transaction.kilometerstand.toLocaleString('de-DE')} km
+                      </span>
+                    )}
+                    {transaction.liter && (
+                      <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                        {transaction.liter.toString().replace('.', ',')} L
+                      </span>
+                    )}
+                  </div>
+                )}
+              </h3>
+              <span className="text-xs text-slate-500 mt-1 block">
+                {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+              </span>
+            </div>
+          </div>
+          
+          <div className="text-right ml-1 sm:ml-2">
+            <div className={`text-sm sm:text-base md:text-lg font-semibold ${
+              transaction.type === 'income' 
+                ? 'text-green-400' 
+                : 'text-red-400'
+            }`}>
+              {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
+            </div>
+          </div>
+
+          {(onEditTransaction || onDeleteTransaction) && (
+            <div className="ml-3 opacity-60 group-hover:opacity-100 transition-opacity">
+              <DropdownMenu
+                trigger={
+                  <button
+                    className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 rounded-lg transition-all"
+                    title="Aktionen"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                    </svg>
+                  </button>
+                }
+                items={[
+                  ...(onEditTransaction ? [{
+                    label: 'Bearbeiten',
+                    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+                    onClick: () => onEditTransaction(transaction),
+                    variant: 'default' as const
+                  }] : []),
+                  ...(onDeleteTransaction ? [{
+                    label: deletingTransactions.has(transaction.id) ? 'Wird gelöscht...' : 'Löschen',
+                    icon: deletingTransactions.has(transaction.id) ? <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+                    onClick: () => handleDeleteTransaction(transaction.id),
+                    variant: 'destructive' as const
+                  }] : [])
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Loading-Zustand
   if (isInitialLoading) {
@@ -567,122 +704,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                         }
                       }
                       
-                      const renderTransaction = (transaction: Transaction) => {
-                        const isTanken = isTankenTransaction(transaction.description, transaction.type);
-                        
-                        return (
-                          <div
-                            key={transaction.id}
-                            className={`group bg-slate-800/30 border border-slate-600/30 rounded-lg p-2 sm:p-3 hover:bg-slate-800/50 transition-all relative ${
-                              deletingTransactions.has(transaction.id) ? 'opacity-60' : ''
-                            }`}
-                          >
-                            {/* Loading Overlay */}
-                            {deletingTransactions.has(transaction.id) && (
-                              <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
-                                <div className="flex flex-col items-center gap-2">
-                                  <svg className="w-8 h-8 animate-spin text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                  </svg>
-                                  <span className="text-sm font-medium text-blue-300">Wird gelöscht...</span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            <div className="flex items-start sm:items-center">
-                              <div className="flex-1 min-w-0">
-                                <div>
-                                  <h3 className="text-white font-medium text-sm md:text-base break-words flex items-center gap-1">
-                                    {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
-                                    {/* Business-Indikator */}
-                                    {transaction.isBusiness && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
-                                        B
-                                      </span>
-                                    )}
-                                    {/* Kilometerstand und Liter-Anzeige für Tanken-Transaktionen */}
-                                    {isTanken && (transaction.kilometerstand || transaction.liter) && (
-                                      <div className="flex items-center gap-1">
-                                        {transaction.kilometerstand && (
-                                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                            {transaction.kilometerstand.toLocaleString('de-DE')} km
-                                          </span>
-                                        )}
-                                        {transaction.liter && (
-                                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-                                            {transaction.liter.toString().replace('.', ',')} L
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </h3>
-                                  <span className="text-xs text-slate-500 mt-1 block">
-                                    {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              <div className="text-right ml-1 sm:ml-2">
-                                <div className={`text-sm sm:text-base md:text-lg font-semibold ${
-                                  transaction.type === 'income' 
-                                    ? 'text-green-400' 
-                                    : 'text-red-400'
-                                }`}>
-                                  {transaction.type === 'income' ? '+' : '-'}{formatAmount(Math.abs(transaction.amount))}
-                                </div>
-                              </div>
-
-                              {(onEditTransaction || onDeleteTransaction) && (
-                                <div className="ml-3 opacity-60 group-hover:opacity-100 transition-opacity">
-                                  <DropdownMenu
-                                    trigger={
-                                      <button
-                                        className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 rounded-lg transition-all"
-                                        title="Aktionen"
-                                      >
-                                        <svg
-                                          className="w-4 h-4"
-                                          fill="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                                        </svg>
-                                      </button>
-                                    }
-                                    items={[
-                                      ...(onEditTransaction ? [{
-                                        label: 'Bearbeiten',
-                                        icon: (
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                          </svg>
-                                        ),
-                                        onClick: () => onEditTransaction(transaction),
-                                        variant: 'default' as const
-                                      }] : []),
-                                      ...(onDeleteTransaction ? [{
-                                        label: deletingTransactions.has(transaction.id) ? 'Wird gelöscht...' : 'Löschen',
-                                        icon: deletingTransactions.has(transaction.id) ? (
-                                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                          </svg>
-                                        ) : (
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                          </svg>
-                                        ),
-                                        onClick: () => handleDeleteTransaction(transaction.id),
-                                        variant: 'destructive' as const
-                                      }] : [])
-                                    ]}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      };
-                      
                       return (
                         <div className="space-y-6">
                           {/* Ausgaben Sektion */}
@@ -756,6 +777,89 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
         ))}
       </div>
       
+      {/* Einzelinvestitionen Section */}
+      {allMonths.some(m => m.year === selectedYear) && (
+        <div className="mt-4 border-t border-slate-600/30 pt-4">
+          <button
+            onClick={toggleOneTime}
+            className="w-full text-left mb-2 pb-1 transition-colors group flex items-center justify-between"
+          >
+            <h3 className="text-lg font-medium text-purple-300 group-hover:text-purple-200">
+              Einzelinvestitionen {selectedYear}
+              {oneTimeInvestments && oneTimeInvestments.length > 0 && (
+                <span className="ml-2 text-sm text-purple-400/70">
+                  ({oneTimeInvestments.length} Transaktionen)
+                </span>
+              )}
+            </h3>
+            <div className="text-purple-400/70 flex items-center">
+              {isLoadingOneTime && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400 mr-2"></div>
+              )}
+              <svg
+                className={`w-5 h-5 transform transition-transform ${
+                  isOneTimeExpanded ? 'rotate-180' : ''
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+          
+          {isOneTimeExpanded && (
+            <div className="space-y-2 mt-3">
+              {isLoadingOneTime ? (
+                <div className="text-center py-4">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400"></div>
+                    <span className="ml-3 text-slate-400">Lade Investitionen...</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {(() => {
+                    const filtered = filterTransactions(oneTimeInvestments);
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-4 text-slate-400">
+                          Keine Einzelinvestitionen in diesem Jahr.
+                        </div>
+                      );
+                    }
+                    
+                    const { expenses, incomes } = sortAndSeparateTransactions(filtered);
+                    
+                    return (
+                      <div className="space-y-6">
+                        {expenses.length > 0 && (
+                          <div>
+                            <div className="space-y-2">
+                              {expenses.map(renderTransaction)}
+                            </div>
+                          </div>
+                        )}
+
+                        {incomes.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-green-300 mb-3 border-b border-green-400/20 pb-2"></h4>
+                            <div className="space-y-2">
+                              {incomes.map(renderTransaction)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Bilanzen, Geplante Ausgaben, Business und H+M Buttons am Ende */}
       <div className="mt-6 pt-4 border-t border-slate-600/30">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

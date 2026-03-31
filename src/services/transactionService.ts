@@ -18,6 +18,7 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     timestamp: Date.now(),
     isPlanned: false, // Normale Transaktionen sind nicht geplant
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
+    isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition Flag
   };
 
   console.log('🔵 [addTransaction] Adding new transaction:', transaction);
@@ -95,6 +96,7 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
         
         const transactions: Transaction[] = allTransactions
           .filter(transaction => !transaction.isPlanned) // Filtere geplante Transaktionen aus
+          .filter(transaction => !transaction.isOneTimeInvestment) // Filtere Einmal-Investitionen aus
           .filter(transaction => 
             includeHM || !isHMTransaction(transaction.description)
           ); // Filtere H+M Transaktionen aus (außer explizit gewünscht)
@@ -127,7 +129,8 @@ export const getAvailableMonths = async (includeHM: boolean = false): Promise<Ar
         
         // Filtere H+M Transaktionen aus (basierend auf Description)
         const filteredTransactions = transactions.filter(transaction => 
-          includeHM || !isHMTransaction(transaction.description)
+          (includeHM || !isHMTransaction(transaction.description)) &&
+          !transaction.isOneTimeInvestment // Filtere Einmal-Investitionen aus
         );
         
         // Gruppiere nach Monat und zähle
@@ -215,6 +218,7 @@ export const updateTransaction = async (
     date?: string;
     isBusiness?: boolean;
     addedToMain?: boolean;
+    isOneTimeInvestment?: boolean;
   }
 ): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
@@ -232,6 +236,7 @@ export const updateTransaction = async (
     if (updatedData.date !== undefined) updates.date = updatedData.date;
     if (updatedData.isBusiness !== undefined) updates.isBusiness = updatedData.isBusiness;
     if (updatedData.addedToMain !== undefined) updates.addedToMain = updatedData.addedToMain;
+    if (updatedData.isOneTimeInvestment !== undefined) updates.isOneTimeInvestment = updatedData.isOneTimeInvestment;
     
     await update(transactionRef, updates);
   } catch (error) {
@@ -258,6 +263,7 @@ export const addPlannedTransaction = async (transactionData: TransactionFormData
     timestamp: Date.now(),
     isPlanned: true,
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
+    isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition-Flag hinzufügen
   };
 
   try {
@@ -324,6 +330,8 @@ export const convertPlannedToRealTransaction = async (plannedTransactionId: stri
           amount: plannedTransaction.amount.toString(),
           description: plannedTransaction.description,
           location: plannedTransaction.location,
+          isBusiness: plannedTransaction.isBusiness,
+          isOneTimeInvestment: plannedTransaction.isOneTimeInvestment,
         };
 
         try {
@@ -368,5 +376,43 @@ export const getAllTransactions = async (): Promise<Transaction[]> => {
       console.error('Error fetching all transactions:', error);
       reject(error);
     }, { onlyOnce: true });
+  });
+};
+
+// Funktion zum Abrufen von Einmal-Investitionen für ein bestimmtes Jahr
+export const getOneTimeInvestmentsForYear = async (year: number): Promise<Transaction[]> => {
+  const transactionsRef = ref(database, 'transactions');
+  
+  // Erstelle Start- und Enddatum für das Jahr
+  const startDate = `${year}-01-01`;
+  const endDate = `${year}-12-31`;
+  
+  console.log(`🔍 [getOneTimeInvestmentsForYear] Loading one-time investments for ${year} (${startDate} to ${endDate})`);
+  
+  const yearQuery = query(
+    transactionsRef,
+    orderByChild('date'),
+    startAt(startDate),
+    endAt(endDate)
+  );
+  
+  return new Promise((resolve, reject) => {
+    onValue(yearQuery, (snapshot) => {
+      const data = snapshot.val();
+      
+      if (data) {
+        const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
+          id,
+          ...(transaction as Omit<Transaction, 'id'>),
+        })).filter(t => !t.isPlanned && t.isOneTimeInvestment === true);
+        
+        // Sortiere absteigend nach Datum
+        transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        resolve(transactions);
+      } else {
+        resolve([]);
+      }
+    }, (error) => reject(error), { onlyOnce: true });
   });
 };

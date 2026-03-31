@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import type { Transaction } from '../types/Transaction';
-import { getAvailableMonths, getTransactionsForMonth } from '../services/transactionService';
+import { getAvailableMonths, getTransactionsForMonth, getOneTimeInvestmentsForYear } from '../services/transactionService';
 
 interface MonthBalance {
   year: number;
@@ -14,6 +14,8 @@ interface MonthBalance {
 
 export const BilanzPage = () => {
   const [monthBalances, setMonthBalances] = useState<MonthBalance[]>([]);
+  const [oneTimeInvestments, setOneTimeInvestments] = useState<Transaction[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,21 +80,24 @@ export const BilanzPage = () => {
     try {
       const months = await getAvailableMonths();
       
-      // Filtere den aktuellen Monat aus
-      const filteredMonths = months.filter(month => {
-        // Schließe den aktuellen Monat aus der Bilanz aus
-        return !(month.year === currentYear && month.month === currentMonth);
-      });
-      
-      const years = [...new Set(filteredMonths.map(m => m.year))].sort((a, b) => b - a);
+      // Filtere Monate heraus, die in der Zukunft liegen
+      const validMonths = months.filter(m => 
+        m.year < currentYear || (m.year === currentYear && m.month <= currentMonth)
+      );
+
+      const yearsSet = new Set(validMonths.map(m => m.year));
+      yearsSet.add(currentYear); // Immer das aktuelle Jahr hinzufügen, um Einzelinvestitionen des laufenden Jahres zu berücksichtigen
+      const years = [...yearsSet].sort((a, b) => b - a);
       setAvailableYears(years);
 
-      // Lade Transaktionen für alle Monate (außer dem aktuellen)
+      // Lade Transaktionen für alle Monate
       const balances: MonthBalance[] = [];
+      const allFetchedTransactions: Transaction[] = [];
       
-      for (const month of filteredMonths) {
+      for (const month of validMonths) {
         try {
           const transactions = await getTransactionsForMonth(month.year, month.month);
+          allFetchedTransactions.push(...transactions);
           const balance = calculateBalance(transactions);
           
           balances.push({
@@ -109,6 +114,20 @@ export const BilanzPage = () => {
       }
       
       setMonthBalances(balances);
+
+      // Lade Einmal-Investitionen für alle Jahre
+      const investments: Transaction[] = [];
+      for (const year of years) {
+        try {
+          const yearlyInvestments = await getOneTimeInvestmentsForYear(year);
+          investments.push(...yearlyInvestments);
+          allFetchedTransactions.push(...yearlyInvestments);
+        } catch (error) {
+          console.error(`Fehler beim Laden der Einmal-Investitionen für ${year}:`, error);
+        }
+      }
+      setOneTimeInvestments(investments);
+      setAllTransactions(allFetchedTransactions);
     } catch (error) {
       console.error('Fehler beim Laden der Monate:', error);
     } finally {
@@ -125,12 +144,68 @@ export const BilanzPage = () => {
     ? monthBalances 
     : monthBalances.filter(balance => balance.year === selectedYear);
 
+  // Filtert Einmal-Investitionen nach ausgewähltem Jahr und Business-Toggle
+  const filteredInvestments = (selectedYear === 'all' 
+    ? oneTimeInvestments 
+    : oneTimeInvestments.filter(t => new Date(t.date).getFullYear() === selectedYear))
+    .filter(t => !isHMTransaction(t.description))
+    .filter(t => showOnlyBusiness ? t.isBusiness === true : t.isBusiness !== true)
+    .filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getFullYear() < currentYear || (tDate.getFullYear() === currentYear && (tDate.getMonth() + 1) <= currentMonth);
+    });
+
+  const investmentsTotals = filteredInvestments.reduce((acc, t) => {
+    const amount = Math.abs(t.amount);
+    if (t.type === 'income') {
+      acc.income += amount;
+      acc.balance += amount;
+    } else {
+      acc.expenses += amount;
+      acc.balance -= amount;
+    }
+    return acc;
+  }, { income: 0, expenses: 0, balance: 0 });
+
   // Berechnet Jahresgesamtwerte
   const yearTotal = filteredBalances.reduce((acc, balance) => ({
     income: acc.income + balance.income,
     expenses: acc.expenses + balance.expenses,
     balance: acc.balance + balance.balance
   }), { income: 0, expenses: 0, balance: 0 });
+
+  // Gesamtergebnis (Operativ + Investitionen)
+  const grandTotal = {
+    income: yearTotal.income + investmentsTotals.income,
+    expenses: yearTotal.expenses + investmentsTotals.expenses,
+    balance: yearTotal.balance + investmentsTotals.balance
+  };
+
+  // Erstellt und lädt die CSV-Datei herunter
+  const exportToCsv = () => {
+    const filtered = allTransactions.filter(t => 
+      !isHMTransaction(t.description) && 
+      (showOnlyBusiness ? t.isBusiness === true : t.isBusiness !== true) &&
+      (selectedYear === 'all' || new Date(t.date).getFullYear() === selectedYear)
+    ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const csvContent = [
+      ['Datum', 'Typ', 'Beschreibung', 'Ort', 'Betrag', 'Kategorie'].join(';'),
+      ...filtered.map(t => [
+        new Date(t.date).toLocaleDateString('de-DE'),
+        t.type === 'income' ? 'Einnahme' : 'Ausgabe',
+        `"${t.description.replace(/"/g, '""')}"`,
+        `"${(t.location || '').replace(/"/g, '""')}"`,
+        t.amount.toString().replace('.', ','), // Komma als Dezimaltrennzeichen
+        t.isBusiness ? 'Business' : 'Privat'
+      ].join(';'))
+    ].join('\n');
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([`\ufeff${csvContent}`], { type: 'text/csv;charset=utf-8;' })); // BOM für Excel UTF-8 Erkennung
+    link.download = `Transaktionen_${showOnlyBusiness ? 'Business' : 'Privat'}_${selectedYear}.csv`;
+    link.click();
+  };
 
   // Bereite Chart-Daten vor
   const chartData = filteredBalances
@@ -143,9 +218,9 @@ export const BilanzPage = () => {
     }));
 
   // Pie Chart Daten für Jahresübersicht
-  const pieData = yearTotal.income > 0 || yearTotal.expenses > 0 ? [
-    { name: 'Einnahmen', value: yearTotal.income, color: '#4ade80' },
-    { name: 'Ausgaben', value: yearTotal.expenses, color: '#f87171' }
+  const pieData = grandTotal.income > 0 || grandTotal.expenses > 0 ? [
+    { name: 'Einnahmen', value: grandTotal.income, color: '#4ade80' },
+    { name: 'Ausgaben', value: grandTotal.expenses, color: '#f87171' }
   ] : [];
 
   // Custom Tooltip für Charts
@@ -187,8 +262,8 @@ export const BilanzPage = () => {
       <div className="w-full max-w-4xl">
         <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-4 sm:p-8 shadow-2xl">
           {/* Header mit Jahresauswahl und Business-Filter */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-xl sm:text-2xl font-semibold text-white">Bilanzen</h2>
               
               {/* Jahresauswahl */}
@@ -226,6 +301,16 @@ export const BilanzPage = () => {
                 </button>
               </div>
             </div>
+
+            <button
+              onClick={exportToCsv}
+              className="inline-flex items-center justify-center px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 text-white text-sm font-medium rounded-lg transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              CSV Export
+            </button>
           </div>
 
           {/* Jahresübersicht */}
@@ -234,27 +319,81 @@ export const BilanzPage = () => {
               <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4">
                 {selectedYear === 'all' ? 'Gesamtübersicht aller Transaktionen' : `Jahresübersicht ${selectedYear}`}
               </h3>
-              <div className="bg-slate-700/30 rounded-lg p-3 sm:p-4 md:p-6">
-                <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-                  <div>
-                    <div className="text-lg sm:text-2xl md:text-3xl font-bold text-green-400">
-                      +{formatAmount(yearTotal.income)}
+              <div className="bg-slate-700/30 rounded-lg p-3 sm:p-4 md:p-6 space-y-4">
+                {/* Operatives Geschäft */}
+                <div>
+                  {filteredInvestments.length > 0 && (
+                    <h4 className="text-sm font-medium text-slate-400 mb-2 sm:mb-3 text-center">Operatives Geschäft</h4>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                    <div>
+                      <div className="text-lg sm:text-2xl md:text-3xl font-bold text-green-400">
+                        +{formatAmount(yearTotal.income)}
+                      </div>
+                      <div className="text-slate-400 text-xs sm:text-sm mt-1">Einnahmen</div>
                     </div>
-                    <div className="text-slate-400 text-xs sm:text-sm mt-1">Einnahmen</div>
-                  </div>
-                  <div>
-                    <div className="text-lg sm:text-2xl md:text-3xl font-bold text-red-400">
-                      -{formatAmount(yearTotal.expenses)}
+                    <div>
+                      <div className="text-lg sm:text-2xl md:text-3xl font-bold text-red-400">
+                        -{formatAmount(yearTotal.expenses)}
+                      </div>
+                      <div className="text-slate-400 text-xs sm:text-sm mt-1">Ausgaben</div>
                     </div>
-                    <div className="text-slate-400 text-xs sm:text-sm mt-1">Ausgaben</div>
-                  </div>
-                  <div>
-                    <div className={`text-lg sm:text-2xl md:text-3xl font-bold ${yearTotal.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {yearTotal.balance >= 0 ? '+' : ''}{formatAmount(yearTotal.balance)}
+                    <div>
+                      <div className={`text-lg sm:text-2xl md:text-3xl font-bold ${yearTotal.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {yearTotal.balance >= 0 ? '+' : '-'}{formatAmount(yearTotal.balance)}
+                      </div>
+                      <div className="text-slate-400 text-xs sm:text-sm mt-1">Bilanz</div>
                     </div>
-                    <div className="text-slate-400 text-xs sm:text-sm mt-1">Bilanz</div>
                   </div>
                 </div>
+
+                {/* Einzelinvestitionen */}
+                {filteredInvestments.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-600/50 pt-4">
+                      <h4 className="text-sm font-medium text-slate-400 mb-2 sm:mb-3 text-center">Einzelinvestitionen</h4>
+                      <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                        <div>
+                          <div className="text-base sm:text-xl font-semibold text-green-400">
+                            +{formatAmount(investmentsTotals.income)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-base sm:text-xl font-semibold text-red-400">
+                            -{formatAmount(investmentsTotals.expenses)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={`text-base sm:text-xl font-semibold ${investmentsTotals.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {investmentsTotals.balance >= 0 ? '+' : '-'}{formatAmount(investmentsTotals.balance)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Gesamtergebnis */}
+                    <div className="border-t border-slate-600/50 pt-4">
+                      <h4 className="text-sm sm:text-base font-medium text-white mb-2 sm:mb-3 text-center">Wahrer Cashflow (Inkl. Investitionen)</h4>
+                      <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                        <div>
+                          <div className="text-lg sm:text-2xl md:text-3xl font-bold text-green-400">
+                            +{formatAmount(grandTotal.income)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-lg sm:text-2xl md:text-3xl font-bold text-red-400">
+                            -{formatAmount(grandTotal.expenses)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={`text-lg sm:text-2xl md:text-3xl font-bold ${grandTotal.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {grandTotal.balance >= 0 ? '+' : '-'}{formatAmount(grandTotal.balance)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -373,8 +512,8 @@ export const BilanzPage = () => {
                         <div className="pt-2 sm:pt-3 border-t border-slate-600">
                           <div className="flex items-center justify-between">
                             <span className="text-white font-medium text-xs sm:text-sm">Bilanz</span>
-                            <span className={`font-bold text-xs sm:text-sm ${yearTotal.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {yearTotal.balance >= 0 ? '+' : ''}{formatAmount(yearTotal.balance)}€
+                            <span className={`font-bold text-xs sm:text-sm ${grandTotal.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {grandTotal.balance >= 0 ? '+' : '-'}{formatAmount(grandTotal.balance)}€
                             </span>
                           </div>
                         </div>
@@ -419,7 +558,7 @@ export const BilanzPage = () => {
                         </div>
                         <div>
                           <div className={`font-semibold ${balance.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {balance.balance >= 0 ? '+' : ''}{formatAmount(balance.balance)}
+                            {balance.balance >= 0 ? '+' : '-'}{formatAmount(balance.balance)}
                           </div>
                           <div className="text-slate-400 text-xs mt-1">Bilanz</div>
                         </div>
@@ -433,6 +572,39 @@ export const BilanzPage = () => {
               <p className="text-slate-400 text-sm sm:text-base">
                 {selectedYear === 'all' ? 'Keine Transaktionen verfügbar.' : `Keine Daten für ${selectedYear} verfügbar.`}
               </p>
+            </div>
+          )}
+
+          {/* Einmal-Investitionen */}
+          {filteredInvestments.length > 0 && (
+            <div className="mt-6 sm:mt-8">
+              <h3 className="text-base sm:text-lg font-medium text-white mb-3 sm:mb-4">
+                Einmal-Investitionen {selectedYear !== 'all' && selectedYear}
+              </h3>
+              <div className="bg-slate-800/30 border border-slate-600/30 rounded-lg p-3 sm:p-4">
+                <div className="space-y-3">
+                  {filteredInvestments.map(investment => (
+                    <div key={investment.id} className="flex items-center justify-between py-2 border-b border-slate-700/50 last:border-0 last:pb-0">
+                      <div>
+                        <div className="text-white text-sm font-medium">{investment.description}</div>
+                        <div className="text-slate-400 text-xs mt-0.5">
+                          {new Date(investment.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          {investment.location && ` • ${investment.location}`}
+                        </div>
+                      </div>
+                      <div className={`font-semibold text-sm whitespace-nowrap ml-4 ${investment.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                        {investment.type === 'income' ? '+' : '-'}{formatAmount(investment.amount)}€
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-3 border-t border-slate-600 flex items-center justify-between">
+                  <span className="text-white font-medium text-sm">Gesamt Investitionen</span>
+                  <span className={`font-bold text-sm ${investmentsTotals.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {investmentsTotals.balance >= 0 ? '+' : '-'}{formatAmount(investmentsTotals.balance)}€
+                  </span>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -143,6 +143,8 @@ function App() {
       location: string;
       type: 'income' | 'expense';
       date: string;
+      isBusiness?: boolean;
+      isOneTimeInvestment?: boolean;
     }) => {
     try {
       await updateTransaction(transactionId, updatedData);
