@@ -176,11 +176,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     );
   };
 
-  // Aktuelles Datum für Filter
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth() + 1; // getMonth() gibt 0-11 zurück, wir brauchen 1-12
-
   // Monatsname extrahieren (ohne Jahr)
   const getMonthName = (monthData: MonthData): string => {
     const date = new Date(monthData.year, monthData.month - 1);
@@ -197,11 +192,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
       }
       return newSet;
     });
-  };
-
-  // Prüft ob es sich um den aktuellen Monat handelt
-  const isCurrentMonth = (year: number, month: number): boolean => {
-    return year === currentYear && month === currentMonth;
   };
 
   // Berechnet die Bilanz für einen Monat (bereits gefilterte Transaktionen)
