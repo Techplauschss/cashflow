@@ -12,9 +12,9 @@ export const TankenPage = () => {
     return lowerDescription.includes('tanken') || lowerDescription.includes('tanke') || (lowerDescription.includes('sprit') && !lowerDescription.includes('sprite'));
   };
 
-  const loadTransactions = async () => {
+  const loadTransactions = async (isSilent = false) => {
     try {
-      setIsLoading(true);
+      if (!isSilent) setIsLoading(true);
       const allTrans = await getAllTransactions();
       // Filtern und dann explizit nach Datum (neuestes zuerst) und dann nach Timestamp sortieren,
       // um eine korrekte chronologische Reihenfolge sicherzustellen, auch bei nachträglich erfassten Einträgen.
@@ -31,12 +31,15 @@ export const TankenPage = () => {
     } catch (error) {
       console.error('Error loading tanken transactions:', error);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     loadTransactions();
+    const handleSilentRefresh = () => loadTransactions(true);
+    window.addEventListener('transaction-changed', handleSilentRefresh);
+    return () => window.removeEventListener('transaction-changed', handleSilentRefresh);
   }, []);
 
   const formatAmount = (amount: number): string => {

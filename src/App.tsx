@@ -111,8 +111,8 @@ function App() {
     try {
       await deleteTransaction(transactionToDelete);
       
-      // Refresh transaction list if available
-      window.location.reload(); // TODO: Replace with a more elegant state update
+      // Dispatch event to refresh data
+      window.dispatchEvent(new CustomEvent('transaction-changed'));
     } catch (error) {
       console.error('Error deleting transaction:', error);
       alert(UI_MESSAGES.DELETE_ERROR);
@@ -151,8 +151,8 @@ function App() {
     try {
       await updateTransaction(transactionId, updatedData);
       
-      // Refresh transaction list if available
-      window.location.reload(); // TODO: Replace with a more elegant state update
+      // Dispatch event to refresh data
+      window.dispatchEvent(new CustomEvent('transaction-changed'));
     } catch (error) {
       console.error('Error updating transaction:', error);
       alert(UI_MESSAGES.UPDATE_ERROR);
@@ -179,7 +179,7 @@ function App() {
         amount: newTransactionData.amount.toFixed(2).replace('.', ','),
         isBusiness: newTransactionData.isBusiness ?? false,
       });
-      window.location.reload(); // TODO: Replace with a more elegant state update
+      window.dispatchEvent(new CustomEvent('transaction-changed'));
     } catch (error) {
       console.error('Error adding transaction:', error);
       alert(UI_MESSAGES.ADD_ERROR);

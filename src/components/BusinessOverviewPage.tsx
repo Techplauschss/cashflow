@@ -152,6 +152,18 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
     loadAvailableMonths();
   }, []);
 
+  // Listener für Änderungen an Transaktionen (z.B. aus Modal in App.tsx)
+  useEffect(() => {
+    const handleTransactionChanged = () => {
+      loadAvailableMonths();
+      if (isOneTimeExpanded) {
+        loadOneTimeInvestments(selectedYear);
+      }
+    };
+    window.addEventListener('transaction-changed', handleTransactionChanged);
+    return () => window.removeEventListener('transaction-changed', handleTransactionChanged);
+  }, [selectedYear, isOneTimeExpanded]);
+
   // Lade Einzelinvestitionen für die Business-Ansicht
   const loadOneTimeInvestments = async (year: number | 'all') => {
     setIsLoadingOneTime(true);

@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
 import { getTransactionsForMonth, getAvailableMonths, isHMTransaction, getOneTimeInvestmentsForYear, updateKilometerstand, updateLiter } from '../services/transactionService';
@@ -38,6 +38,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [isOneTimeExpanded, setIsOneTimeExpanded] = useState(false);
   const [isLoadingOneTime, setIsLoadingOneTime] = useState(false);
   const [visibleInvestmentDates, setVisibleInvestmentDates] = useState<Set<string>>(new Set());
+
+  // NEU: Ref für den aktuellen State der Monate, um bei asynchronen Updates keine veralteten Closures zu haben
+  const monthsRef = useRef<MonthData[]>(months);
+  useEffect(() => {
+    monthsRef.current = months;
+  }, [months]);
 
   // New sub-component for Kilometerstand input
   const KilometerstandInput = ({ transaction }: { transaction: Transaction }) => {
@@ -528,24 +534,46 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     }).format(amount);
   };
 
-  // Ref-Handler mit verbessertem refreshData
+  // Ref-Handler mit "Soft Refresh", um Scrollposition und geöffnete Monate zu behalten
   const refreshData = async () => {
-    console.log('🔄 [refreshData] REFRESH TRIGGERED - Clearing and reloading all data');
+    console.log('🔄 [refreshData] SOFT REFRESH TRIGGERED');
     
-    // Leere die Transaktionen aller bereits geladenen Monate
-    setMonths(prev => prev.map(m => ({
-      ...m,
-      transactions: undefined,
-      isLoading: false
-    })));
-    console.log('🗑️ [refreshData] Cleared all loaded transactions');
-    
-    // Lade die verfügbaren Monate neu
-    await loadAvailableMonths();
-    if (isOneTimeExpanded) {
-      await loadOneTimeInvestmentsForYear(selectedYear);
+    try {
+      // Lade die Metadaten (Anzahlen etc.) im Hintergrund neu
+      const availableMonths = await getAvailableMonths();
+      
+      // Finde alle Monate, die aktuell aufgeklappt sind
+      const expandedMonths = monthsRef.current.filter(m => m.isExpanded);
+      
+      // Lade die Transaktionen für diese offenen Monate parallel neu
+      const fetchedTransactions = await Promise.all(
+        expandedMonths.map(async (m) => {
+          const txs = await getTransactionsForMonth(m.year, m.month);
+          return { year: m.year, month: m.month, transactions: txs };
+        })
+      );
+
+      // State aktualisieren, ohne den isExpanded-Zustand (Aufgeklappt) zu verlieren
+      setMonths(prevMonths => prevMonths.map(month => {
+        const newMeta = availableMonths.find(m => m.year === month.year && m.month === month.month);
+        const fetched = fetchedTransactions.find(f => f.year === month.year && f.month === month.month);
+        
+        return {
+          ...month,
+          count: newMeta ? newMeta.count : month.count,
+          transactions: fetched ? fetched.transactions : month.transactions
+        };
+      }));
+
+      // Einmal-Investitionen neu laden, falls diese aufgeklappt sind
+      if (isOneTimeExpanded) {
+        await loadOneTimeInvestmentsForYear(selectedYear);
+      }
+      
+      console.log('✅ [refreshData] Soft refresh complete');
+    } catch (error) {
+      console.error('❌ [refreshData] Error during soft refresh:', error);
     }
-    console.log('✅ [refreshData] Refresh complete');
   };
 
   useImperativeHandle(ref, () => ({
@@ -556,6 +584,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   useEffect(() => {
     loadAvailableMonths();
   }, []);
+
+  // Listener für Änderungen an Transaktionen (z.B. aus Modal in App.tsx)
+  useEffect(() => {
+    window.addEventListener('transaction-changed', refreshData);
+    return () => window.removeEventListener('transaction-changed', refreshData);
+  }, [selectedYear, isOneTimeExpanded]);
 
   // Jahr-Wechsel Effect
   useEffect(() => {

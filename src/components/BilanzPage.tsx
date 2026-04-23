@@ -88,8 +88,8 @@ export const BilanzPage = () => {
   };
 
   // Lädt alle Monate und berechnet Bilanzen
-  const loadBalances = async () => {
-    setIsLoading(true);
+  const loadBalances = async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     try {
       const months = await getAvailableMonths();
       
@@ -144,12 +144,15 @@ export const BilanzPage = () => {
     } catch (error) {
       console.error('Fehler beim Laden der Monate:', error);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     loadBalances();
+    const handleSilentRefresh = () => loadBalances(true);
+    window.addEventListener('transaction-changed', handleSilentRefresh);
+    return () => window.removeEventListener('transaction-changed', handleSilentRefresh);
   }, [showOnlyBusiness]); // Lade Daten neu, wenn sich der Business-Filter ändert
 
   // Filtert Bilanzen nach ausgewähltem Jahr
