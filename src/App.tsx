@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
 import { InlineTransactionForm } from './components/InlineTransactionForm';
 import { BilanzPage } from './components/BilanzPage';
-import { PlannedExpensesPage } from './components/PlannedExpensesPage';
+import { TankenPage } from './components/TankenPage';
 import { BusinessOverviewPage } from './components/BusinessOverviewPage';
 import { HMPage } from './components/HMPage';
 import { ConfirmModal } from './components/ConfirmModal';
@@ -145,6 +145,8 @@ function App() {
       date: string;
       isBusiness?: boolean;
       isOneTimeInvestment?: boolean;
+      kilometerstand?: number;
+      liter?: number;
     }) => {
     try {
       await updateTransaction(transactionId, updatedData);
@@ -170,7 +172,7 @@ function App() {
     setShowAddModal(true);
   };
 
-  const saveNewTransaction = async (newTransactionData: { type: 'income' | 'expense'; amount: number; description: string; location: string; date: string; timestamp: number; isBusiness?: boolean; }) => {
+  const saveNewTransaction = async (newTransactionData: { type: 'income' | 'expense'; amount: number; description: string; location: string; date: string; timestamp: number; isBusiness?: boolean; isOneTimeInvestment?: boolean; kilometerstand?: number; liter?: number; }) => {
     try {
       await addTransaction({
         ...newTransactionData,
@@ -203,7 +205,7 @@ function App() {
             />
           } />
           <Route path="/bilanzen" element={<BilanzPage />} />
-          <Route path="/geplant" element={<PlannedExpensesPage />} />
+        <Route path="/tanken" element={<TankenPage />} />
           <Route path="/business" element={
             <BusinessOverviewPage 
               onDeleteTransaction={handleDeleteTransaction}

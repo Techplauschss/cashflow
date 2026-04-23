@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
-import { getTransactionsForMonth, getAvailableMonths, isHMTransaction, getOneTimeInvestmentsForYear } from '../services/transactionService';
+import { getTransactionsForMonth, getAvailableMonths, isHMTransaction, getOneTimeInvestmentsForYear, updateKilometerstand, updateLiter } from '../services/transactionService';
 import { DropdownMenu } from './DropdownMenu';
 
 interface MonthData {
@@ -37,6 +37,144 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [oneTimeInvestments, setOneTimeInvestments] = useState<Transaction[]>([]);
   const [isOneTimeExpanded, setIsOneTimeExpanded] = useState(false);
   const [isLoadingOneTime, setIsLoadingOneTime] = useState(false);
+  const [visibleInvestmentDates, setVisibleInvestmentDates] = useState<Set<string>>(new Set());
+
+  // New sub-component for Kilometerstand input
+  const KilometerstandInput = ({ transaction }: { transaction: Transaction }) => {
+    const [km, setKm] = useState(transaction.kilometerstand ? transaction.kilometerstand.toLocaleString('de-DE') : '');
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+      setKm(transaction.kilometerstand ? transaction.kilometerstand.toLocaleString('de-DE') : '');
+    }, [transaction.kilometerstand]);
+
+    const handleKmUpdate = async () => {
+      const kmValue = parseInt(km.replace(/\./g, ''), 10);
+      
+      if (isNaN(kmValue) || kmValue === transaction.kilometerstand) {
+        if (isNaN(kmValue)) {
+            setKm(transaction.kilometerstand ? transaction.kilometerstand.toLocaleString('de-DE') : '');
+        }
+        return;
+      }
+
+      setIsSaving(true);
+      try {
+        await updateKilometerstand(transaction.id, kmValue);
+      } catch (error) {
+        console.error("Failed to update kilometerstand", error);
+        alert("Fehler beim Speichern des Kilometerstands.");
+        setKm(transaction.kilometerstand ? transaction.kilometerstand.toLocaleString('de-DE') : '');
+      } finally {
+        setIsSaving(false);
+      }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        handleKmUpdate();
+        e.currentTarget.blur();
+      }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setKm(e.target.value);
+    };
+
+    return (
+      <div className="relative flex items-center ml-2 group/km">
+        <div className="relative flex items-center">
+          <input 
+            type="text"
+            placeholder="km-Stand"
+            value={km}
+            onChange={handleChange}
+            onBlur={handleKmUpdate}
+            onKeyDown={handleKeyDown}
+            className={`w-20 sm:w-24 pl-2.5 pr-6 py-1 bg-slate-900/40 border border-slate-700 hover:border-slate-500 hover:bg-slate-800/60 rounded-md text-xs font-medium text-slate-300 placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-slate-900 transition-all ${isSaving ? 'opacity-50' : ''}`}
+            disabled={isSaving}
+          />
+          <div className="absolute right-2 text-[10px] font-bold text-slate-500 pointer-events-none transition-colors group-focus-within/km:text-blue-400">
+            km
+          </div>
+        </div>
+        {isSaving && (
+          <div className="absolute -right-5 top-1/2 -translate-y-1/2">
+            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-400"></div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // New sub-component for Liter input
+  const LiterInput = ({ transaction }: { transaction: Transaction }) => {
+    const [liter, setLiter] = useState(transaction.liter ? transaction.liter.toString().replace('.', ',') : '');
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+      setLiter(transaction.liter ? transaction.liter.toString().replace('.', ',') : '');
+    }, [transaction.liter]);
+
+    const handleLiterUpdate = async () => {
+      const cleanValue = liter.replace(/[^\d.,]/g, '').replace(',', '.');
+      const literValue = parseFloat(cleanValue);
+      
+      if (isNaN(literValue) || literValue === transaction.liter) {
+        if (isNaN(literValue) && liter !== '') {
+            setLiter(transaction.liter ? transaction.liter.toString().replace('.', ',') : '');
+        }
+        return;
+      }
+
+      setIsSaving(true);
+      try {
+        await updateLiter(transaction.id, literValue);
+      } catch (error) {
+        console.error("Failed to update liter", error);
+        alert("Fehler beim Speichern der Liter.");
+        setLiter(transaction.liter ? transaction.liter.toString().replace('.', ',') : '');
+      } finally {
+        setIsSaving(false);
+      }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        handleLiterUpdate();
+        e.currentTarget.blur();
+      }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setLiter(e.target.value);
+    };
+
+    return (
+      <div className="relative flex items-center ml-2 group/liter">
+        <div className="relative flex items-center">
+          <input 
+            type="text"
+            placeholder="Liter"
+            value={liter}
+            onChange={handleChange}
+            onBlur={handleLiterUpdate}
+            onKeyDown={handleKeyDown}
+            className={`w-16 sm:w-20 pl-2.5 pr-6 py-1 bg-slate-900/40 border border-slate-700 hover:border-slate-500 hover:bg-slate-800/60 rounded-md text-xs font-medium text-slate-300 placeholder-slate-600 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:bg-slate-900 transition-all ${isSaving ? 'opacity-50' : ''}`}
+            disabled={isSaving}
+          />
+          <div className="absolute right-2 text-[10px] font-bold text-slate-500 pointer-events-none transition-colors group-focus-within/liter:text-green-400">
+            L
+          </div>
+        </div>
+        {isSaving && (
+          <div className="absolute -right-5 top-1/2 -translate-y-1/2">
+            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-400"></div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Aktuelles Datum für Filter
   const currentDate = new Date();
@@ -47,6 +185,18 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const getMonthName = (monthData: MonthData): string => {
     const date = new Date(monthData.year, monthData.month - 1);
     return date.toLocaleDateString('de-DE', { month: 'long' });
+  };
+
+  const toggleInvestmentDateVisibility = (transactionId: string) => {
+    setVisibleInvestmentDates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(transactionId)) {
+        newSet.delete(transactionId);
+      } else {
+        newSet.add(transactionId);
+      }
+      return newSet;
+    });
   };
 
   // Prüft ob es sich um den aktuellen Monat handelt
@@ -433,7 +583,11 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     return (
       <div
         key={transaction.id}
-        className={`group bg-slate-800/30 border border-slate-600/30 rounded-lg p-2 sm:p-3 hover:bg-slate-800/50 transition-all relative ${
+        className={`group border rounded-lg p-2 sm:p-3 transition-all relative ${
+          isTanken
+            ? 'bg-blue-900/10 border-blue-800/50 hover:bg-blue-900/60'
+            : 'bg-slate-800/30 border-slate-600/30 hover:bg-slate-800/50'
+        } ${
           deletingTransactions.has(transaction.id) ? 'opacity-60' : ''
         }`}
       >
@@ -466,25 +620,39 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                     I
                   </span>
                 )}
-                {/* Kilometerstand und Liter-Anzeige für Tanken-Transaktionen */}
-                {isTanken && (transaction.kilometerstand || transaction.liter) && (
-                  <div className="flex items-center gap-1">
-                    {transaction.kilometerstand && (
-                      <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                        {transaction.kilometerstand.toLocaleString('de-DE')} km
-                      </span>
-                    )}
-                    {transaction.liter && (
-                      <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-md text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-                        {transaction.liter.toString().replace('.', ',')} L
-                      </span>
-                    )}
-                  </div>
+                {/* Kilometerstand- und Liter-Eingabefelder für Tanken-Transaktionen */}
+                {isTanken && (
+                  <>
+                    <KilometerstandInput transaction={transaction} />
+                    <LiterInput transaction={transaction} />
+                  </>
                 )}
               </h3>
-              <span className="text-xs text-slate-500 mt-1 block">
-                {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
-              </span>
+              {transaction.isOneTimeInvestment ? (
+                <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                  <button
+                    onClick={() => toggleInvestmentDateVisibility(transaction.id)}
+                    className="text-slate-500 hover:text-slate-300 transition-colors"
+                    title="Datum anzeigen/verbergen"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      {visibleInvestmentDates.has(transaction.id) ? (
+                        <>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.01 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.01-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </>
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      )}
+                    </svg>
+                  </button>
+                  {visibleInvestmentDates.has(transaction.id) && <span>{highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}</span>}
+                </div>
+              ) : (
+                <span className="text-xs text-slate-500 mt-1 block">
+                  {highlightSearchTerm(new Date(transaction.date).toLocaleDateString('de-DE'), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                </span>
+              )}
             </div>
           </div>
           
@@ -729,8 +897,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                       );
                     })()}
                     
-                    {/* Monatsbilanz - nur anzeigen wenn Transaktionen vorhanden und NICHT der aktuelle Monat */}
-                    {monthData.transactions && monthData.transactions.length > 0 && !activeSearchTerm.trim() && !isCurrentMonth(monthData.year, monthData.month) && (
+                    {/* Monatsbilanz - anzeigen wenn Transaktionen vorhanden */}
+                    {monthData.transactions && monthData.transactions.length > 0 && !activeSearchTerm.trim() && (
                       (() => {
                         const filteredTransactionsForBalance = filterTransactions(monthData.transactions);
                         const balance = calculateMonthBalance(filteredTransactionsForBalance);
@@ -884,23 +1052,11 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </Link>
           
           <Link 
-            to="/geplant"
+            to="/tanken"
             className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-900"
           >
-            <svg 
-              className="w-5 h-5 mr-2" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4h3a1 1 0 011 1v9a2 2 0 01-2 2H5a2 2 0 01-2-2V8a1 1 0 011-1h3z" 
-              />
-            </svg>
-            Geplante Ausgaben
+            <span className="text-lg mr-2">⛽</span>
+            Tanken
           </Link>
           
           <Link 

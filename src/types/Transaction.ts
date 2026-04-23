@@ -12,6 +12,7 @@ export interface Transaction {
   isBusiness?: boolean; // Optional: Markiert Geschäftstransaktionen
   addedToMain?: boolean; // Optional: Markiert ob H+M Transaktion bereits zu Main hinzugefügt wurde
   isOneTimeInvestment?: boolean; // Optional: Markiert Einmal-Investitionen
+  vehicle?: 'Auto' | 'Moped' | 'Skoda' | 'Sonstige'; // Optional: Fahrzeugtyp für Tanken
 }
 
 export interface TransactionFormData {
@@ -23,4 +24,7 @@ export interface TransactionFormData {
   isPlanned?: boolean; // Optional: für geplante Ausgaben
   isBusiness?: boolean; // Optional: für Geschäftstransaktionen
   isOneTimeInvestment?: boolean; // Optional: für Einmal-Investitionen
+  kilometerstand?: number;
+  liter?: number;
+  vehicle?: 'Auto' | 'Moped' | 'Skoda' | 'Sonstige'; // Optional: Fahrzeugtyp für Tanken
 }

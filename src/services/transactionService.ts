@@ -21,6 +21,10 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition Flag
   };
 
+  if (transactionData.kilometerstand !== undefined) transaction.kilometerstand = transactionData.kilometerstand;
+  if (transactionData.liter !== undefined) transaction.liter = transactionData.liter;
+  if (transactionData.vehicle !== undefined) transaction.vehicle = transactionData.vehicle;
+
   console.log('🔵 [addTransaction] Adding new transaction:', transaction);
 
   try {
@@ -195,6 +199,18 @@ export const updateLiter = async (transactionId: string, liter: number): Promise
   }
 };
 
+// Funktion zum Aktualisieren des Fahrzeugs einer Transaktion
+export const updateVehicle = async (transactionId: string, vehicle: 'Auto' | 'Moped' | 'Skoda' | 'Sonstige'): Promise<void> => {
+  const transactionRef = ref(database, `transactions/${transactionId}`);
+  
+  try {
+    await update(transactionRef, { vehicle });
+  } catch (error) {
+    console.error('Error updating vehicle:', error);
+    throw new Error('Fehler beim Aktualisieren des Fahrzeugs');
+  }
+};
+
 // Funktion zum Löschen einer Transaktion
 export const deleteTransaction = async (transactionId: string): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
@@ -219,6 +235,9 @@ export const updateTransaction = async (
     isBusiness?: boolean;
     addedToMain?: boolean;
     isOneTimeInvestment?: boolean;
+    kilometerstand?: number;
+    liter?: number;
+    vehicle?: 'Auto' | 'Moped' | 'Skoda' | 'Sonstige';
   }
 ): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
@@ -237,6 +256,9 @@ export const updateTransaction = async (
     if (updatedData.isBusiness !== undefined) updates.isBusiness = updatedData.isBusiness;
     if (updatedData.addedToMain !== undefined) updates.addedToMain = updatedData.addedToMain;
     if (updatedData.isOneTimeInvestment !== undefined) updates.isOneTimeInvestment = updatedData.isOneTimeInvestment;
+    if (updatedData.kilometerstand !== undefined) updates.kilometerstand = updatedData.kilometerstand;
+    if (updatedData.liter !== undefined) updates.liter = updatedData.liter;
+    if (updatedData.vehicle !== undefined) updates.vehicle = updatedData.vehicle;
     
     await update(transactionRef, updates);
   } catch (error) {
@@ -265,6 +287,10 @@ export const addPlannedTransaction = async (transactionData: TransactionFormData
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
     isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition-Flag hinzufügen
   };
+
+  if (transactionData.kilometerstand !== undefined) transaction.kilometerstand = transactionData.kilometerstand;
+  if (transactionData.liter !== undefined) transaction.liter = transactionData.liter;
+  if (transactionData.vehicle !== undefined) transaction.vehicle = transactionData.vehicle;
 
   try {
     const newTransactionRef = await push(plannedTransactionsRef, transaction);

@@ -12,6 +12,8 @@ interface EditTransactionModalProps {
     date: string;
     isBusiness?: boolean;
     isOneTimeInvestment?: boolean;
+    kilometerstand?: number;
+    liter?: number;
   }) => void;
   onCancel: () => void;
 }
@@ -29,6 +31,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [date, setDate] = useState('');
   const [isBusiness, setIsBusiness] = useState(false);
   const [isOneTimeInvestment, setIsOneTimeInvestment] = useState(false);
+  const [kilometerstand, setKilometerstand] = useState('');
+  const [liter, setLiter] = useState('');
 
   useEffect(() => {
     if (transaction) {
@@ -39,6 +43,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setDate(transaction.date);
       setIsBusiness(transaction.isBusiness || false);
       setIsOneTimeInvestment(transaction.isOneTimeInvestment || false);
+      setKilometerstand(transaction.kilometerstand ? String(transaction.kilometerstand) : '');
+      setLiter(transaction.liter ? String(transaction.liter).replace('.', ',') : '');
     }
   }, [transaction]);
 
@@ -63,9 +69,18 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       type,
       date,
       isBusiness,
-      isOneTimeInvestment
+      isOneTimeInvestment,
+      kilometerstand: kilometerstand ? parseInt(kilometerstand.replace(/\./g, ''), 10) : undefined,
+      liter: liter ? parseFloat(liter.replace(',', '.')) : undefined,
     });
   };
+
+  const isTanken = (() => {
+    const lowerDescription = description.toLowerCase();
+    const hasTanken = lowerDescription.includes('tanken');
+    const hasSprit = lowerDescription.includes('sprit') && !lowerDescription.includes('sprite');
+    return (hasTanken || hasSprit) && type === 'expense';
+  })();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -164,6 +179,36 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 placeholder="z.B. Supermarkt, Online..."
               />
             </div>
+
+            {/* Tanken-spezifische Felder */}
+            {isTanken && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Kilometerstand
+                  </label>
+                  <input
+                    type="text"
+                    value={kilometerstand}
+                    onChange={(e) => setKilometerstand(e.target.value.replace(/[^\d]/g, ''))}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="km"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Liter
+                  </label>
+                  <input
+                    type="text"
+                    value={liter}
+                    onChange={(e) => setLiter(e.target.value.replace(/[^\d,]/g, ''))}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    placeholder="L"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Toggles für Business und Einmal-Investition */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

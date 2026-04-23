@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Transaction } from '../types/Transaction';
 
-type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean, isOneTimeInvestment?: boolean };
+type NewTransactionData = Omit<Transaction, 'id'> & { isBusiness?: boolean, isOneTimeInvestment?: boolean, kilometerstand?: number, liter?: number };
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -23,6 +23,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isBusiness, setIsBusiness] = useState(false);
   const [isOneTimeInvestment, setIsOneTimeInvestment] = useState(false);
+  const [kilometerstand, setKilometerstand] = useState('');
+  const [liter, setLiter] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -33,6 +35,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       setDate(prefilledData.date || new Date().toISOString().split('T')[0]);
       setIsBusiness(prefilledData.isBusiness || false);
       setIsOneTimeInvestment(prefilledData.isOneTimeInvestment || false);
+      setKilometerstand(prefilledData.kilometerstand ? String(prefilledData.kilometerstand) : '');
+      setLiter(prefilledData.liter ? String(prefilledData.liter).replace('.', ',') : '');
     }
   }, [isOpen, prefilledData]);
 
@@ -114,9 +118,18 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       date,
       isBusiness,
       isOneTimeInvestment,
+      kilometerstand: kilometerstand ? parseInt(kilometerstand.replace(/\./g, ''), 10) : undefined,
+      liter: liter ? parseFloat(liter.replace(',', '.')) : undefined,
       timestamp: Date.now(),
     });
   };
+
+  const isTanken = (() => {
+    const lowerDescription = description.toLowerCase();
+    const hasTanken = lowerDescription.includes('tanken');
+    const hasSprit = lowerDescription.includes('sprit') && !lowerDescription.includes('sprite');
+    return (hasTanken || hasSprit) && type === 'expense';
+  })();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -215,6 +228,36 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 placeholder="z.B. Supermarkt, Online..."
               />
             </div>
+
+            {/* Tanken-spezifische Felder */}
+            {isTanken && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Kilometerstand
+                  </label>
+                  <input
+                    type="text"
+                    value={kilometerstand}
+                    onChange={(e) => setKilometerstand(e.target.value.replace(/[^\d]/g, ''))}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="km"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Liter
+                  </label>
+                  <input
+                    type="text"
+                    value={liter}
+                    onChange={(e) => setLiter(e.target.value.replace(/[^\d,]/g, ''))}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    placeholder="L"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Toggles für Business und Einmal-Investition */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
