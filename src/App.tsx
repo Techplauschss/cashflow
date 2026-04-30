@@ -2,6 +2,7 @@ import './styles.css';
 import { useState, useRef, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
+import { VermoegenOverview } from './components/VermoegenOverview';
 import { InlineTransactionForm } from './components/InlineTransactionForm';
 import { BilanzPage } from './components/BilanzPage';
 import { TankenPage } from './components/TankenPage';
@@ -205,6 +206,7 @@ function App() {
             />
           } />
           <Route path="/bilanzen" element={<BilanzPage />} />
+          <Route path="/vermoegen" element={<VermoegenOverview />} />
         <Route path="/tanken" element={<TankenPage />} />
           <Route path="/business" element={
             <BusinessOverviewPage 

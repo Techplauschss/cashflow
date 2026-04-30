@@ -10,6 +10,7 @@ interface MonthBalance {
   income: number;
   expenses: number;
   balance: number;
+  savingsRate?: number;
 }
 
 export const BilanzPage = () => {
@@ -33,6 +34,12 @@ export const BilanzPage = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+  };
+
+  // Berechnet die Sparquote
+  const calculateSavingsRate = (income: number, expenses: number): number => {
+    if (income === 0) return 0;
+    return ((income - expenses) / income) * 100;
   };
 
   const toggleInvestmentDateVisibility = (transactionId: string) => {
@@ -119,7 +126,8 @@ export const BilanzPage = () => {
             monthYear: month.monthYear,
             income: balance.income,
             expenses: balance.expenses,
-            balance: balance.balance
+            balance: balance.balance,
+            savingsRate: calculateSavingsRate(balance.income, balance.expenses)
           });
         } catch (error) {
           console.error(`Fehler beim Laden der Transaktionen für ${month.monthYear}:`, error);
@@ -557,6 +565,16 @@ export const BilanzPage = () => {
                             year: 'numeric' 
                           })}
                         </h4>
+                        <div className="flex items-center gap-2">
+                          <div className={`px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${
+                            (balance.savingsRate ?? 0) >= 20 ? 'bg-green-500/20 text-green-300' :
+                            (balance.savingsRate ?? 0) >= 10 ? 'bg-blue-500/20 text-blue-300' :
+                            (balance.savingsRate ?? 0) >= 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                            'bg-red-500/20 text-red-300'
+                          }`}>
+                            {((balance.savingsRate ?? 0) >= 0 ? '+' : '')}{(balance.savingsRate ?? 0).toFixed(1)}%
+                          </div>
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm text-center">

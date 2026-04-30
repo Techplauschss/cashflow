@@ -224,6 +224,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     };
   };
 
+  // Berechnet die Sparquote
+  const calculateSavingsRate = (income: number, expenses: number): number => {
+    if (income === 0) return 0;
+    return ((income - expenses) / income) * 100;
+  };
+
   // Text kürzen wenn länger als 30 Zeichen
   const truncateText = (text: string, maxLength: number = 30): string => {
     if (text.length <= maxLength) return text;
@@ -926,10 +932,21 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                       (() => {
                         const filteredTransactionsForBalance = filterTransactions(monthData.transactions);
                         const balance = calculateMonthBalance(filteredTransactionsForBalance);
+                        const savingsRate = calculateSavingsRate(balance.income, balance.expenses);
                         return (
                           <div className="mt-3 pt-3 border-t border-slate-600/30">
                             <div className="bg-slate-700/30 rounded-lg p-2 sm:p-3">
-                              <h4 className="text-white font-medium text-sm mb-2">Monatsbilanz</h4>
+                              <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-white font-medium text-sm">Monatsbilanz</h4>
+                                <div className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                  savingsRate >= 20 ? 'bg-green-500/20 text-green-300' :
+                                  savingsRate >= 10 ? 'bg-blue-500/20 text-blue-300' :
+                                  savingsRate >= 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                                  'bg-red-500/20 text-red-300'
+                                }`}>
+                                  Sparquote: {savingsRate >= 0 ? '+' : ''}{savingsRate.toFixed(1)}%
+                                </div>
+                              </div>
                               <div className="grid grid-cols-3 gap-3 text-sm">
                                 <div className="text-center">
                                   <div className="text-green-400 font-semibold">
@@ -1054,7 +1071,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
       {/* Bilanzen, Geplante Ausgaben, Business und H+M Buttons am Ende */}
       <div className="mt-6 pt-4 border-t border-slate-600/30">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           <Link 
             to="/bilanzen"
             className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900"
@@ -1084,6 +1101,16 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </Link>
           
           <Link 
+            to="/vermoegen"
+            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Vermögen
+          </Link>
+          
+          <Link 
             to="/business"
             className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
           >
@@ -1100,7 +1127,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                 d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" 
               />
             </svg>
-            🏢 Business
+            Business
           </Link>
           
           <Link 

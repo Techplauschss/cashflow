@@ -2,6 +2,14 @@ import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update, r
 import { database } from '../firebase';
 import type { Transaction, TransactionFormData } from '../types/Transaction';
 
+export interface Exchange {
+  id: string;
+  name: string;
+  balance: number;
+  timestamp: number;
+  parentId?: string | null;
+}
+
 // Funktion zum Hinzufügen einer neuen Transaktion (normale, nicht geplante)
 export const addTransaction = async (transactionData: TransactionFormData): Promise<string> => {
   const transactionsRef = ref(database, 'transactions');
@@ -116,6 +124,62 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
       reject(error);
     }, { onlyOnce: true });
   });
+};
+
+// ===== BÖRSEN / VERMÖGEN =====
+
+export const addExchange = async (name: string, balance: number, parentId: string | null = null): Promise<string> => {
+  const exchangesRef = ref(database, 'exchanges');
+  try {
+    const newRef = await push(exchangesRef, {
+      name,
+      balance,
+      timestamp: Date.now(),
+      parentId
+    });
+    return newRef.key!;
+  } catch (error) {
+    console.error('Error adding exchange:', error);
+    throw new Error('Fehler beim Hinzufügen der Börse');
+  }
+};
+
+export const updateExchange = async (id: string, data: Partial<Exchange>): Promise<void> => {
+  const exchangeRef = ref(database, `exchanges/${id}`);
+  try {
+    await update(exchangeRef, { ...data, timestamp: Date.now() });
+  } catch (error) {
+    console.error('Error updating exchange:', error);
+    throw new Error('Fehler beim Aktualisieren der Börse');
+  }
+};
+
+export const deleteExchange = async (id: string): Promise<void> => {
+  const exchangeRef = ref(database, `exchanges/${id}`);
+  try {
+    await remove(exchangeRef);
+  } catch (error) {
+    console.error('Error deleting exchange:', error);
+    throw new Error('Fehler beim Löschen der Börse');
+  }
+};
+
+export const subscribeToExchanges = (callback: (exchanges: Exchange[]) => void): (() => void) => {
+  const exchangesRef = ref(database, 'exchanges');
+  const unsubscribe = onValue(exchangesRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const exchanges: Exchange[] = Object.entries(data).map(([id, val]: [string, any]) => ({
+        id,
+        ...val
+      }));
+      // Nach dem höchsten Saldo absteigend sortieren
+      callback(exchanges.sort((a, b) => b.balance - a.balance));
+    } else {
+      callback([]);
+    }
+  });
+  return () => off(exchangesRef, 'value', unsubscribe);
 };
 
 // Funktion zum Abrufen aller verfügbaren Monate (nur Metadaten)
