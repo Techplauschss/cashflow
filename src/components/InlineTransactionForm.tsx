@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { addTransaction } from '../services/transactionService';
+import { addTransaction, getExchangesWithShortcuts } from '../services/transactionService';
 import type { Transaction } from '../types/Transaction';
 
 interface InlineTransactionFormProps {
@@ -13,19 +13,63 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
   const [location, setLocation] = useState('');
   const [type, setType] = useState<'E' | 'A'>('A'); // E = Einnahme, A = Ausgabe
   const [isBusiness, setIsBusiness] = useState(false);
+  const [assetType, setAssetType] = useState<string>('TR');
+  const [availableShortcuts, setAvailableShortcuts] = useState<Array<{shortcut: string; name: string}>>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    if (!isInitialized && prefilledData && Object.keys(prefilledData).length > 0) {
-      setDescription(prefilledData.description || '');
-      setAmount(prefilledData.amount ? String(prefilledData.amount) : '');
-      setLocation(prefilledData.location || '');
-      setType((prefilledData.type as any) === 'income' ? 'E' : 'A');
-      setIsBusiness(prefilledData.isBusiness || false);
-      setIsInitialized(true);
+    const loadShortcuts = async () => {
+      try {
+        const shortcuts = await getExchangesWithShortcuts();
+        setAvailableShortcuts(shortcuts);
+      } catch (error) {
+        console.error('Error loading shortcuts:', error);
+      }
+    };
+    loadShortcuts();
+  }, []);
+
+  // Automatisch Asset-Type auf 'V' setzen wenn Business-Transaktion
+  useEffect(() => {
+    if (isBusiness && assetType !== 'V') {
+      setAssetType('V');
+    } else if (!isBusiness && assetType === 'V' && availableShortcuts.length > 0) {
+      // Nur zurücksetzen wenn Shortcuts verfügbar sind
+      setAssetType(availableShortcuts[0].shortcut);
+    } else if (!isBusiness && assetType === 'V' && availableShortcuts.length === 0) {
+      // Fallback auf TR wenn keine Shortcuts verfügbar
+      setAssetType('TR');
     }
-  }, [prefilledData, isInitialized]);
+  }, [isBusiness, assetType, availableShortcuts]);
+
+  const getNextAssetType = () => {
+    if (availableShortcuts.length === 0) {
+      // Fallback auf feste Werte wenn keine Shortcuts definiert
+      return assetType === 'TR' ? 'SP' : assetType === 'SP' ? 'B' : assetType === 'B' ? 'V' : 'TR';
+    }
+    
+    const currentIndex = availableShortcuts.findIndex(s => s.shortcut === assetType);
+    if (currentIndex === -1) return availableShortcuts[0].shortcut;
+    
+    const nextIndex = (currentIndex + 1) % availableShortcuts.length;
+    return availableShortcuts[nextIndex].shortcut;
+  };
+
+  const getCurrentShortcutName = () => {
+    if (availableShortcuts.length === 0) {
+      // Fallback auf feste Namen
+      const names: Record<string, string> = {
+        'TR': 'Trade Republic',
+        'SP': 'Sparkasse', 
+        'B': 'Bar',
+        'V': 'Vivid'
+      };
+      return names[assetType] || assetType;
+    }
+    
+    const shortcut = availableShortcuts.find(s => s.shortcut === assetType);
+    return shortcut ? shortcut.name : assetType;
+  };
 
   const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
@@ -86,6 +130,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
         description: description.trim(),
         location: location.trim() || 'Unbekannt',
         isBusiness: isBusiness,
+        sourceExchangeType: assetType,
       });
 
       // reset
@@ -94,6 +139,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
       setLocation('');
       setType('A');
       setIsBusiness(prefilledData.isBusiness || false);
+      // Asset-Type wird automatisch durch useEffect zurückgesetzt basierend auf isBusiness
 
       if (onSaved) await onSaved();
     } catch (error) {
@@ -139,7 +185,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
                 placeholder="Ort"
               />
             </div>
-            <div className="col-span-1 flex items-center justify-center">
+            <div className="col-span-1 flex flex-col items-center justify-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsBusiness(!isBusiness)}
@@ -149,6 +195,14 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
                 title={isBusiness ? 'Geschäftstransaktion' : 'Private Transaktion'}
               >
                 B
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssetType(getNextAssetType())}
+                className="w-10 h-8 rounded-lg text-xs font-semibold text-slate-200 bg-slate-700 hover:bg-slate-600 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title={`Asset wählen: ${getCurrentShortcutName()}`}
+              >
+                {assetType}
               </button>
             </div>
             <div className="col-span-2 flex items-center justify-center">
@@ -206,7 +260,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
               />
             </div>
 
-            <div className="md:col-span-1 flex items-center justify-center">
+            <div className="md:col-span-1 flex items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={() => setIsBusiness(!isBusiness)}
@@ -216,6 +270,14 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
                 title={isBusiness ? 'Geschäftstransaktion' : 'Private Transaktion'}
               >
                 B
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssetType(getNextAssetType())}
+                className="w-14 h-9 rounded-full text-sm font-semibold text-slate-200 bg-slate-700 hover:bg-slate-600 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title={`Asset wählen: ${getCurrentShortcutName()}`}
+              >
+                {assetType}
               </button>
             </div>
 

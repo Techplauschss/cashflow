@@ -1,6 +1,19 @@
-import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update, remove } from 'firebase/database';
+import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update, remove, get, runTransaction } from 'firebase/database';
 import { database } from '../firebase';
 import type { Transaction, TransactionFormData } from '../types/Transaction';
+
+const EXCHANGE_NAME_GROUPS: Record<'TR' | 'SP' | 'B' | 'V', string[]> = {
+  TR: ['tagesgeld', 'trade republic', 'trade-republic', 'trade republic tagesgeld', 'tr'],
+  SP: ['sparkasse', 'sparkasse giro', 'sp'],
+  B: ['bar', 'bargeld', 'kasse'],
+  V: ['vivid', 'vivid giro', 'v'],
+};
+
+export interface PortfolioProduct {
+  id: string;
+  isin: string;
+  shares: number;
+}
 
 export interface Exchange {
   id: string;
@@ -8,7 +21,58 @@ export interface Exchange {
   balance: number;
   timestamp: number;
   parentId?: string | null;
+  shortcut?: string; // Kürzel für schnelle Zuordnung in Transaktionen
+  products?: PortfolioProduct[];
 }
+
+const normalizeName = (value: string) => value.trim().toLowerCase();
+
+const findExchangeByNameGroup = (exchanges: Exchange[], names: string[]) => {
+  const normalizedNames = names.map(normalizeName);
+
+  const exactMatch = exchanges.find(ex => normalizedNames.includes(normalizeName(ex.name)));
+  if (exactMatch) return exactMatch;
+
+  return exchanges.find(ex => normalizedNames.some(name => normalizeName(ex.name).includes(name))) || null;
+};
+
+export const findExchangeByType = async (type: 'TR' | 'SP' | 'B' | 'V'): Promise<Exchange | null> => {
+  const exchangesRef = ref(database, 'exchanges');
+  const snapshot = await get(exchangesRef);
+  if (!snapshot.exists()) return null;
+
+  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
+    .map(([id, val]) => ({ id, ...val }));
+
+  return findExchangeByNameGroup(exchanges, EXCHANGE_NAME_GROUPS[type]);
+};
+
+const findDefaultAssetExchange = async (): Promise<Exchange | null> => {
+  const exchangesRef = ref(database, 'exchanges');
+  const snapshot = await get(exchangesRef);
+  if (!snapshot.exists()) return null;
+
+  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
+    .map(([id, val]) => ({ id, ...val }));
+
+  return findExchangeByType('TR') || findExchangeByType('SP') || findExchangeByType('B') || exchanges[0] || null;
+};
+
+const updateExchangeBalance = async (exchangeId: string, delta: number): Promise<void> => {
+  const exchangeBalanceRef = ref(database, `exchanges/${exchangeId}/balance`);
+  await runTransaction(exchangeBalanceRef, (currentValue) => {
+    if (currentValue === null || currentValue === undefined) {
+      return currentValue;
+    }
+
+    const numericValue = Number(currentValue);
+    if (Number.isNaN(numericValue)) {
+      return currentValue;
+    }
+
+    return numericValue + delta;
+  });
+};
 
 // Funktion zum Hinzufügen einer neuen Transaktion (normale, nicht geplante)
 export const addTransaction = async (transactionData: TransactionFormData): Promise<string> => {
@@ -16,7 +80,20 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
   
   // Konvertiere den Betrag von String zu Number
   const amount = parseFloat(transactionData.amount.replace(/\./g, '').replace(',', '.'));
-  
+  let selectedExchange: Exchange | null = null;
+
+  if (transactionData.sourceExchangeType) {
+    // Zuerst versuchen, über Shortcut zu finden
+    selectedExchange = await findExchangeByShortcut(transactionData.sourceExchangeType);
+    
+    // Fallback auf feste Zuordnungen wenn kein Shortcut gefunden
+    if (!selectedExchange) {
+      selectedExchange = await findExchangeByType(transactionData.sourceExchangeType as 'TR' | 'SP' | 'B' | 'V');
+    }
+  } else {
+    selectedExchange = await findDefaultAssetExchange();
+  }
+
   const transaction: Omit<Transaction, 'id'> = {
     type: transactionData.type,
     amount: amount,
@@ -27,6 +104,7 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     isPlanned: false, // Normale Transaktionen sind nicht geplant
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
     isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition Flag
+    ...(selectedExchange ? { sourceExchangeId: selectedExchange.id } : {}),
   };
 
   if (transactionData.kilometerstand !== undefined) transaction.kilometerstand = transactionData.kilometerstand;
@@ -38,11 +116,34 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
   try {
     const newTransactionRef = await push(transactionsRef, transaction);
     console.log('✅ [addTransaction] Successfully added transaction with ID:', newTransactionRef.key);
+
+    if (selectedExchange) {
+      const delta = transaction.type === 'expense' ? -amount : amount;
+      try {
+        await updateExchangeBalance(selectedExchange.id, delta);
+      } catch (balanceError) {
+        console.error('❌ [addTransaction] Error updating selected asset exchange balance:', balanceError);
+        await remove(newTransactionRef);
+        throw new Error('Fehler beim Aktualisieren des ausgewählten Vermögenskontos. Die Transaktion wurde nicht gespeichert.');
+      }
+    }
+
     return newTransactionRef.key!;
   } catch (error) {
     console.error('❌ [addTransaction] Error adding transaction:', error);
     throw new Error('Fehler beim Hinzufügen der Transaktion');
   }
+};
+
+export const findExchangeByShortcut = async (shortcut: string): Promise<Exchange | null> => {
+  const exchangesRef = ref(database, 'exchanges');
+  const snapshot = await get(exchangesRef);
+  if (!snapshot.exists()) return null;
+
+  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
+    .map(([id, val]) => ({ id, ...val }));
+
+  return exchanges.find(ex => ex.shortcut?.toUpperCase() === shortcut.toUpperCase()) || null;
 };
 
 // Hilfsfunktion zum Prüfen auf H+M Transaktionen
@@ -128,14 +229,16 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
 
 // ===== BÖRSEN / VERMÖGEN =====
 
-export const addExchange = async (name: string, balance: number, parentId: string | null = null): Promise<string> => {
+export const addExchange = async (name: string, balance: number, parentId: string | null = null, shortcut?: string, products?: PortfolioProduct[]): Promise<string> => {
   const exchangesRef = ref(database, 'exchanges');
   try {
     const newRef = await push(exchangesRef, {
       name,
       balance,
       timestamp: Date.now(),
-      parentId
+      parentId,
+      ...(shortcut ? { shortcut } : {}),
+      ...(products && products.length > 0 ? { products } : {})
     });
     return newRef.key!;
   } catch (error) {
@@ -162,6 +265,20 @@ export const deleteExchange = async (id: string): Promise<void> => {
     console.error('Error deleting exchange:', error);
     throw new Error('Fehler beim Löschen der Börse');
   }
+};
+
+export const getExchangesWithShortcuts = async (): Promise<Array<{shortcut: string; name: string}>> => {
+  const exchangesRef = ref(database, 'exchanges');
+  const snapshot = await get(exchangesRef);
+  if (!snapshot.exists()) return [];
+
+  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
+    .map(([id, val]) => ({ id, ...val }));
+
+  return exchanges
+    .filter(ex => ex.shortcut)
+    .map(ex => ({ shortcut: ex.shortcut!, name: ex.name }))
+    .sort((a, b) => a.shortcut.localeCompare(b.shortcut));
 };
 
 export const subscribeToExchanges = (callback: (exchanges: Exchange[]) => void): (() => void) => {
@@ -280,6 +397,25 @@ export const deleteTransaction = async (transactionId: string): Promise<void> =>
   const transactionRef = ref(database, `transactions/${transactionId}`);
   
   try {
+    const snapshot = await get(transactionRef);
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    const transaction = snapshot.val() as Transaction;
+    const sourceExchangeId = transaction.sourceExchangeId;
+    const exchangeId = sourceExchangeId || (await findDefaultAssetExchange())?.id;
+
+    if (exchangeId && transaction.amount > 0) {
+      const revertDelta = transaction.type === 'expense' ? transaction.amount : -transaction.amount;
+      try {
+        await updateExchangeBalance(exchangeId, revertDelta);
+      } catch (balanceError) {
+        console.error('❌ [deleteTransaction] Error reverting selected asset exchange balance:', balanceError);
+        throw new Error('Fehler beim Zurücksetzen des Vermögenskontos. Die Transaktion wurde nicht gelöscht.');
+      }
+    }
+
     await remove(transactionRef);
   } catch (error) {
     console.error('Error deleting transaction:', error);

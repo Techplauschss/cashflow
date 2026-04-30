@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { addExchange, updateExchange, deleteExchange, subscribeToExchanges, type Exchange } from '../services/transactionService';
+import { addExchange, updateExchange, deleteExchange, subscribeToExchanges, type Exchange, type PortfolioProduct } from '../services/transactionService';
 
 export const VermoegenOverview: React.FC = () => {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
@@ -7,7 +7,11 @@ export const VermoegenOverview: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [balance, setBalance] = useState('');
+  const [shortcut, setShortcut] = useState('');
   const [parentId, setParentId] = useState<string | null>(null);
+  const [products, setProducts] = useState<PortfolioProduct[]>([]);
+  const [newProductIsin, setNewProductIsin] = useState('');
+  const [newProductShares, setNewProductShares] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -38,17 +42,26 @@ export const VermoegenOverview: React.FC = () => {
     setBalance(value);
   };
 
+  const isPortfolioAccount = name.trim().toLowerCase().includes('portfolio');
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     let numericBalance = parseFloat(balance.replace(/\./g, '').replace(',', '.'));
     // Wenn kein Wert oder ein ungültiger Wert eingegeben wurde, setze das Guthaben auf 0
     if (isNaN(numericBalance)) numericBalance = 0;
+
+    if (editingId && hasChildren(editingId)) {
+      numericBalance = 0;
+    }
+
     if (!name.trim()) return;
 
+    const productPayload = isPortfolioAccount ? products : undefined;
+
     if (editingId) {
-      await updateExchange(editingId, { name: name.trim(), balance: numericBalance, parentId });
+      await updateExchange(editingId, { name: name.trim(), balance: numericBalance, parentId, shortcut: shortcut.trim() || undefined, ...(productPayload ? { products: productPayload } : {}) });
     } else {
-      await addExchange(name.trim(), numericBalance, parentId);
+      await addExchange(name.trim(), numericBalance, parentId, shortcut.trim() || undefined, productPayload);
     }
     resetForm();
   };
@@ -57,7 +70,15 @@ export const VermoegenOverview: React.FC = () => {
     setEditingId(exchange.id);
     setName(exchange.name);
     setBalance(exchange.balance.toString().replace('.', ','));
+    setShortcut(exchange.shortcut || '');
     setParentId(exchange.parentId || null);
+    setProducts(exchange.products?.map((product) => ({
+      id: product.id,
+      isin: product.isin,
+      shares: Number(product.shares) || 0,
+    })) || []);
+    setNewProductIsin('');
+    setNewProductShares('');
     setIsAdding(true);
   };
 
@@ -78,12 +99,19 @@ export const VermoegenOverview: React.FC = () => {
     setEditingId(null);
     setName('');
     setBalance('');
+    setShortcut('');
     setParentId(null);
+    setProducts([]);
+    setNewProductIsin('');
+    setNewProductShares('');
   };
 
   if (isLoading) return null;
 
   const getChildren = (id: string) => exchanges.filter(ex => ex.parentId === id);
+  const hasChildren = (id: string | null) => !!id && exchanges.some(ex => ex.parentId === id);
+  const editingHasChildren = editingId ? hasChildren(editingId) : false;
+
   const topLevelExchanges = exchanges
     .filter(ex => !ex.parentId)
     .sort((a, b) => {
@@ -131,23 +159,49 @@ export const VermoegenOverview: React.FC = () => {
                 {children.length > 0 && (
                   <div className="pl-3 sm:pl-4 space-y-2 border-l-2 border-slate-700/50 ml-3 sm:ml-4">
                     {children.map(child => (
-                      <div key={child.id} className="flex justify-between items-center p-2 sm:p-3 bg-slate-800/20 border border-slate-700/50 rounded-lg hover:bg-slate-800/40 transition-colors group">
-                        <span className="text-slate-300 font-medium text-sm flex items-center gap-2">
-                          <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                          {child.name}
-                        </span>
-                        <div className="flex items-center space-x-4">
-                          <span className="text-slate-300 font-semibold text-sm">{formatAmount(child.balance)}</span>
-                          <div className="flex space-x-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleEdit(child)} className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button onClick={() => handleDelete(child.id)} className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-md transition-all" title="Löschen">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
+                      <React.Fragment key={child.id}>
+                        <div className="flex justify-between items-center p-2 sm:p-3 bg-slate-800/20 border border-slate-700/50 rounded-lg hover:bg-slate-800/40 transition-colors group">
+                          <span className="text-slate-300 font-medium text-sm flex items-center gap-2">
+                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                            {child.name}
+                          </span>
+                          <div className="flex items-center space-x-4">
+                            <span className="text-slate-300 font-semibold text-sm">{formatAmount(child.balance)}</span>
+                            <div className="flex space-x-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleEdit(child)} className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              </button>
+                              <button onClick={() => handleDelete(child.id)} className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-md transition-all" title="Löschen">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                        {child.name.trim().toLowerCase().includes('portfolio') && (
+                          <div className="pl-6 sm:pl-8 pb-2">
+                            <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
+                                <span className="text-xs text-slate-500">{child.products?.length ?? 0} Einträge</span>
+                              </div>
+                              {child.products && child.products.length > 0 ? (
+                                <div className="space-y-2">
+                                  {child.products.map((product) => (
+                                    <div key={product.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-800/50 px-3 py-2 text-slate-200 text-sm">
+                                      <div className="flex flex-col">
+                                        <span className="font-medium">{product.isin.toUpperCase()}</span>
+                                        <span className="text-slate-400">Anteile: {product.shares}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-slate-500 text-sm">Keine Finanzprodukte hinterlegt. Bearbeiten, um ISIN und Anteile hinzuzufügen.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </React.Fragment>
                     ))}
                   </div>
                 )}
@@ -169,9 +223,33 @@ export const VermoegenOverview: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">Name (Börse/Konto)</label>
                 <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="z.B. Trade Republic" required autoFocus />
               </div>
+              {editingHasChildren ? (
+                <div className="sm:col-span-2 p-3 rounded-lg bg-slate-800/40 border border-slate-600/50">
+                  <p className="text-sm text-slate-300 font-medium mb-1.5">Guthaben (€) (Optional)</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Guthaben (€) (Optional)</label>
+                  <input
+                    type="text"
+                    value={balance}
+                    onChange={handleBalanceChange}
+                    className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0,00"
+                  />
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Guthaben (€) (Optional)</label>
-                <input type="text" value={balance} onChange={handleBalanceChange} className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0,00" />
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Kürzel (Optional)</label>
+                <input
+                  type="text"
+                  value={shortcut}
+                  onChange={(e) => setShortcut(e.target.value.toUpperCase().slice(0, 3))}
+                  className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="z.B. TR"
+                  maxLength={3}
+                />
+                <p className="mt-1 text-xs text-slate-400">Max. 3 Zeichen, wird automatisch großgeschrieben</p>
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">Überkonto / Hauptkonto (Optional)</label>
@@ -186,6 +264,75 @@ export const VermoegenOverview: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {isPortfolioAccount && (
+                <div className="sm:col-span-2 bg-slate-800/40 p-4 rounded-xl border border-slate-600/40">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-300 mb-1.5">ISIN</label>
+                      <input
+                        type="text"
+                        value={newProductIsin}
+                        onChange={(e) => setNewProductIsin(e.target.value.toUpperCase())}
+                        className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="z.B. DE000A1YB8A1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1.5">Anteile</label>
+                      <input
+                        type="text"
+                        value={newProductShares}
+                        onChange={(e) => setNewProductShares(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isin = newProductIsin.trim();
+                        const shares = parseFloat(newProductShares.replace(',', '.'));
+                        if (!isin || !newProductShares || Number.isNaN(shares) || shares <= 0) {
+                          alert('Bitte gültige ISIN und Stückzahl eingeben.');
+                          return;
+                        }
+                        setProducts((current) => [
+                          ...current,
+                          { id: `${Date.now()}-${isin}`, isin, shares },
+                        ]);
+                        setNewProductIsin('');
+                        setNewProductShares('');
+                      }}
+                      className="w-full px-3 py-2.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-500 transition-colors"
+                    >
+                      Produkt hinzufügen
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {products.length > 0 ? (
+                      products.map((product) => (
+                        <div key={product.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-900/70 p-3 border border-slate-700">
+                          <div>
+                            <p className="text-slate-100 text-sm font-medium">{product.isin}</p>
+                            <p className="text-slate-400 text-xs">Anteile: {product.shares}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setProducts((current) => current.filter((item) => item.id !== product.id))}
+                            className="text-red-400 hover:text-red-300 text-sm"
+                          >
+                            Entfernen
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-500 text-sm">Hier können Sie direkt ISINs und Anteilsmengen für Ihr Portfolio eintragen.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end space-x-3 pt-2">
               <button type="button" onClick={resetForm} className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors border border-transparent hover:border-slate-600/50">Abbrechen</button>
