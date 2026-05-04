@@ -21,7 +21,7 @@ export interface Exchange {
   balance: number;
   timestamp: number;
   parentId?: string | null;
-  shortcut?: string; // Kürzel für schnelle Zuordnung in Transaktionen
+  shortcut?: string | null; // Kürzel für schnelle Zuordnung in Transaktionen
   products?: PortfolioProduct[];
 }
 
