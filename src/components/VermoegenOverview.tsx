@@ -32,13 +32,30 @@ export const VermoegenOverview: React.FC = () => {
   };
 
   const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/[^\d,\.-]/g, '');
-    value = value.replace(/\./g, ',');
-    const commaCount = (value.match(/,/g) || []).length;
-    if (commaCount > 1) {
-      const firstCommaIndex = value.indexOf(',');
-      value = value.substring(0, firstCommaIndex + 1) + value.substring(firstCommaIndex + 1).replace(/,/g, '');
+    let value = e.target.value;
+
+    // 1. Entferne alle Zeichen, die keine Ziffern, Komma, Punkt oder Minus sind
+    value = value.replace(/[^\d,\.-]/g, '');
+
+    // 2. Behandle das Minuszeichen: Nur am Anfang erlaubt
+    if (value.startsWith('-')) {
+      value = '-' + value.substring(1).replace(/-/g, ''); // Stelle sicher, dass nur ein führendes Minus vorhanden ist
+    } else {
+      value = value.replace(/-/g, ''); // Entferne alle nicht-führenden Minuszeichen
     }
+
+    // 3. Stelle sicher, dass nur ein Dezimaltrennzeichen (Komma) vorhanden ist
+    const parts = value.split(',');
+    if (parts.length > 2) {
+      value = parts[0] + ',' + parts.slice(1).join(''); // Behalte den ersten Teil, füge den Rest ohne Kommas zusammen
+    }
+
+    // 4. Verhindere Punkte nach dem Dezimalkomma (da Punkte im deutschen Format Tausendertrennzeichen sind)
+    if (value.includes(',')) {
+      const commaIndex = value.indexOf(',');
+      value = value.substring(0, commaIndex + 1) + value.substring(commaIndex + 1).replace(/\./g, '');
+    }
+
     setBalance(value);
   };
 
@@ -59,7 +76,13 @@ export const VermoegenOverview: React.FC = () => {
     const productPayload = isPortfolioAccount ? products : undefined;
 
     if (editingId) {
-      await updateExchange(editingId, { name: name.trim(), balance: numericBalance, parentId, shortcut: shortcut.trim() || undefined, ...(productPayload ? { products: productPayload } : {}) });
+      await updateExchange(editingId, {
+        name: name.trim(),
+        balance: numericBalance,
+        parentId,
+        shortcut: shortcut.trim() === '' ? null : shortcut.trim(), // Set to null if empty to explicitly delete the field in Firebase
+        ...(productPayload ? { products: productPayload } : {})
+      });
     } else {
       await addExchange(name.trim(), numericBalance, parentId, shortcut.trim() || undefined, productPayload);
     }
