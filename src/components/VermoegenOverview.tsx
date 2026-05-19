@@ -604,7 +604,7 @@ export const VermoegenOverview: React.FC = () => {
                   dataKey="value"
                   stroke="none"
                 >
-                  {pieChartData.map((entry, index) => (
+                  {pieChartData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
