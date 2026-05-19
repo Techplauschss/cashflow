@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { addExchange, updateExchange, deleteExchange, subscribeToExchanges, type Exchange, type PortfolioProduct } from '../services/transactionService';
+import { useLivePrices } from '../services/useLivePrices';
 
 export const VermoegenOverview: React.FC = () => {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
@@ -14,6 +16,10 @@ export const VermoegenOverview: React.FC = () => {
   const [newProductShares, setNewProductShares] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showTotalWealth, setShowTotalWealth] = useState(true);
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [targetExchange, setTargetExchange] = useState<Exchange | null>(null);
+  const [modalIsin, setModalIsin] = useState('');
+  const [modalShares, setModalShares] = useState('');
 
   useEffect(() => {
     const unsubscribe = subscribeToExchanges((data) => {
@@ -23,7 +29,22 @@ export const VermoegenOverview: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const totalWealth = exchanges.reduce((sum, ex) => sum + (ex.balance || 0), 0);
+  const allProducts = React.useMemo(() => {
+    return exchanges.flatMap(ex => ex.products || []);
+  }, [exchanges]);
+
+  const { prices, loading: pricesLoading, failedIsins, refetchPrices } = useLivePrices(allProducts);
+
+  const getProductValue = (product: PortfolioProduct) => {
+    const price = prices[product.isin];
+    return price ? price * product.shares : 0;
+  };
+
+  const getExchangeProductValue = (ex: Exchange) => {
+    return (ex.products || []).reduce((sum, p) => sum + getProductValue(p), 0);
+  };
+
+  const totalWealth = exchanges.reduce((sum, ex) => sum + (ex.balance || 0) + getExchangeProductValue(ex), 0);
 
   const formatAmount = (amount: number): string => {
     return new Intl.NumberFormat('de-DE', {
@@ -60,7 +81,31 @@ export const VermoegenOverview: React.FC = () => {
     setBalance(value);
   };
 
-  const isPortfolioAccount = name.trim().toLowerCase().includes('portfolio');
+  const hasPortfolioFeatures = (accountName: string) => {
+    const lower = accountName.trim().toLowerCase();
+    return lower.includes('portfolio') || lower.includes('depot');
+  };
+
+  const isPortfolioAccount = hasPortfolioFeatures(name);
+
+  const getChildren = (id: string) => exchanges.filter((ex) => ex.parentId === id);
+  const hasChildren = (id: string | null) => !!id && exchanges.some((ex) => ex.parentId === id);
+  const editingHasChildren = editingId ? hasChildren(editingId) : false;
+
+  const topLevelExchanges = exchanges
+    .filter((ex) => !ex.parentId)
+    .map((mainExchange) => {
+      const children = getChildren(mainExchange.id);
+      const childrenProductValue = children.reduce((s, c) => s + getExchangeProductValue(c), 0);
+      const mainProductValue = getExchangeProductValue(mainExchange);
+      const combinedBalance = mainExchange.balance + mainProductValue + children.reduce((s, c) => s + (c.balance || 0), 0) + childrenProductValue;
+      return { ...mainExchange, children, combinedBalance };
+    })
+    .sort((a, b) => b.combinedBalance - a.combinedBalance);
+
+  const pieChartData = topLevelExchanges
+    .filter((ex) => ex.combinedBalance > 0)
+    .map((ex) => ({ name: ex.name, value: ex.combinedBalance }));
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,8 +152,7 @@ export const VermoegenOverview: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    const hasChildren = exchanges.some(ex => ex.parentId === id);
-    if (hasChildren) {
+    if (hasChildren(id)) {
       alert('Bitte löschen oder verschieben Sie zuerst alle Unterkonten, bevor Sie dieses Hauptkonto löschen.');
       return;
     }
@@ -130,26 +174,137 @@ export const VermoegenOverview: React.FC = () => {
     setNewProductShares('');
   };
 
+  const handleOpenAddProduct = (e: React.MouseEvent, exchange: Exchange) => {
+    e.stopPropagation();
+    setTargetExchange(exchange);
+    setModalIsin('');
+    setModalShares('');
+    setIsAddProductModalOpen(true);
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetExchange) return;
+
+    const isin = modalIsin.trim();
+    const shares = parseFloat(modalShares.replace(',', '.'));
+    
+    if (!isin || Number.isNaN(shares) || shares <= 0) {
+      alert('Bitte gültige ISIN und Stückzahl eingeben.');
+      return;
+    }
+
+    const currentProducts = targetExchange.products || [];
+    const newProduct: PortfolioProduct = {
+      id: `${Date.now()}-${isin}`,
+      isin,
+      shares
+    };
+
+    try {
+      await updateExchange(targetExchange.id, {
+        products: [...currentProducts, newProduct]
+      });
+      setIsAddProductModalOpen(false);
+      setTargetExchange(null);
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen des Produkts:', error);
+      alert('Fehler beim Speichern des Produkts.');
+    }
+  };
+
+  const handleDeleteProduct = async (exchangeId: string, productId: string) => {
+    if (window.confirm('Produkt wirklich löschen?')) {
+      const exchange = exchanges.find((ex) => ex.id === exchangeId);
+      if (exchange) {
+        const updatedProducts = (exchange.products || []).filter((p) => p.id !== productId);
+        try {
+          await updateExchange(exchangeId, { products: updatedProducts });
+        } catch (error) {
+          console.error('Fehler beim Löschen des Produkts:', error);
+          alert('Fehler beim Löschen des Produkts.');
+        }
+      }
+    }
+  };
+
+   // Funktion zum Rendern der Portfolio-Produkte (inkl. Ladezustände & Live-Kurse)
+  const renderProducts = (exchange: Exchange) => (
+    <div className="space-y-2">
+      {(exchange.products || []).map((product) => {
+        const livePrice = prices[product.isin];
+        const isFailed = failedIsins.has(product.isin);
+        const totalValue = livePrice ? livePrice * product.shares : 0;
+        
+        return (
+          <div key={product.id} className="group flex items-center justify-between gap-3 rounded-lg bg-slate-800/50 hover:bg-slate-800/70 transition-colors px-3 py-2 text-slate-200 text-sm">
+            <div className="flex flex-col">
+              <span className="font-medium">{product.isin.toUpperCase()}</span>
+              <span className="text-slate-400">Anteile: {product.shares}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col text-right">
+                {pricesLoading ? (
+                  <div className="animate-pulse flex flex-col items-end gap-1 mt-1">
+                    <div className="h-4 w-16 bg-slate-600 rounded"></div>
+                    <div className="h-3 w-12 bg-slate-600 rounded"></div>
+                  </div>
+                ) : isFailed ? (
+                  <span className="text-amber-400 text-xs">Kurs nicht verfügbar</span>
+                ) : livePrice ? (
+                  <>
+                    <span className="font-semibold text-green-400">{formatAmount(totalValue)}</span>
+                    <span className="text-xs text-slate-400">{formatAmount(livePrice)} / Stück</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500 text-xs">Warte auf Kurs...</span>
+                )}
+              </div>
+              <div className="flex opacity-0 group-hover:opacity-100 transition-opacity pl-2 border-l border-slate-700/50">
+                <button onClick={() => handleDeleteProduct(exchange.id, product.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded-md transition-all" title="Produkt löschen">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
   if (isLoading) return null;
 
-  const getChildren = (id: string) => exchanges.filter(ex => ex.parentId === id);
-  const hasChildren = (id: string | null) => !!id && exchanges.some(ex => ex.parentId === id);
-  const editingHasChildren = editingId ? hasChildren(editingId) : false;
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#6366f1', '#ec4899', '#14b8a6', '#f43f5e', '#06b6d4', '#f97316'];
 
-  const topLevelExchanges = exchanges
-    .filter(ex => !ex.parentId)
-    .sort((a, b) => {
-      const balanceA = a.balance + getChildren(a.id).reduce((s, c) => s + (c.balance || 0), 0);
-      const balanceB = b.balance + getChildren(b.id).reduce((s, c) => s + (c.balance || 0), 0);
-      return balanceB - balanceA;
-    });
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-slate-800 border border-slate-600 rounded-lg p-2 shadow-lg z-50">
+          <p className="text-white font-medium text-sm">{payload[0].name}</p>
+          {showTotalWealth && (
+            <p className="text-slate-300 text-xs mt-1">{formatAmount(payload[0].value)}</p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="flex items-center justify-center px-3 sm:px-4 pb-4 sm:pb-8">
       <div className="w-full max-w-4xl">
         <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-4 sm:p-6 shadow-2xl mt-4 sm:mt-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl sm:text-2xl font-semibold text-white">Vermögen</h2>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white">Vermögen</h2>
+            <button 
+              onClick={refetchPrices}
+              disabled={pricesLoading}
+              className={`p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-md transition-all ${pricesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Live-Kurse aktualisieren"
+            >
+              <svg className={`w-4 h-4 sm:w-5 sm:h-5 ${pricesLoading ? 'animate-spin text-blue-400' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            </button>
+          </div>
           <div className="text-right">
             <div className="flex items-center justify-end gap-2">
               <p className="text-sm text-slate-400">Gesamtvermögen</p>
@@ -167,23 +322,41 @@ export const VermoegenOverview: React.FC = () => {
               </button>
             </div>
             <p className="text-xl font-bold text-green-400">
-              {showTotalWealth ? formatAmount(totalWealth) : '•••••• €'}
+              {!showTotalWealth ? '•••••• €' : pricesLoading ? (
+                <span className="animate-pulse bg-slate-700/50 rounded h-7 w-32 inline-block align-middle mt-1"></span>
+              ) : (
+                formatAmount(totalWealth)
+              )}
             </p>
           </div>
         </div>
 
         <div className="space-y-4">
           {topLevelExchanges.map((mainExchange) => {
-            const children = getChildren(mainExchange.id);
-            const combinedBalance = mainExchange.balance + children.reduce((s, c) => s + (c.balance || 0), 0);
-
             return (
               <div key={mainExchange.id} className="space-y-2">
                 {/* Main Account */}
                 <div className="flex justify-between items-center p-3 sm:p-4 bg-slate-800/40 border border-slate-600/40 rounded-lg hover:bg-slate-800/60 transition-colors group shadow-sm">
-                  <span className="text-white font-medium">{mainExchange.name}</span>
+                  <span className="text-white font-medium flex items-center gap-2">
+                    {mainExchange.name}
+                    {hasPortfolioFeatures(mainExchange.name) && (
+                      <button
+                        onClick={(e) => handleOpenAddProduct(e, mainExchange)}
+                        className="text-slate-400 hover:text-green-400 transition-colors bg-slate-700/50 hover:bg-slate-600 rounded-full w-5 h-5 flex items-center justify-center text-sm pb-0.5"
+                        title="ISIN hinzufügen"
+                      >
+                        +
+                      </button>
+                    )}
+                  </span>
                   <div className="flex items-center space-x-4">
-                    <span className="text-white font-bold">{formatAmount(combinedBalance)}</span>
+                    <span className="text-white font-bold">
+                      {pricesLoading ? (
+                        <span className="animate-pulse bg-slate-700/50 rounded h-6 w-24 inline-block align-middle"></span>
+                      ) : (
+                        formatAmount(mainExchange.combinedBalance)
+                      )}
+                    </span>
                     <div className="flex space-x-2 opacity-60 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => handleEdit(mainExchange)} className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -195,18 +368,53 @@ export const VermoegenOverview: React.FC = () => {
                   </div>
                 </div>
 
+              {/* Main Account Products */}
+              {hasPortfolioFeatures(mainExchange.name) && (
+                <div className="pl-6 sm:pl-8 pb-2 mt-2 border-l-2 border-transparent ml-3 sm:ml-4">
+                  <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
+                      <span className="text-xs text-slate-500">{mainExchange.products?.length ?? 0} Einträge</span>
+                    </div>
+                    {mainExchange.products && mainExchange.products.length > 0 ? (
+                      renderProducts(mainExchange)
+                    ) : (
+                      <p className="text-slate-500 text-sm">Keine Finanzprodukte hinterlegt. Bearbeiten, um ISIN und Anteile hinzuzufügen.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
                 {/* Sub Accounts */}
-                {children.length > 0 && (
+                {mainExchange.children.length > 0 && (
                   <div className="pl-3 sm:pl-4 space-y-2 border-l-2 border-slate-700/50 ml-3 sm:ml-4">
-                    {children.map(child => (
+                    {mainExchange.children.map(child => {
+                      const childProductValue = getExchangeProductValue(child);
+                      const childTotal = child.balance + childProductValue;
+                      return (
                       <React.Fragment key={child.id}>
                         <div className="flex justify-between items-center p-2 sm:p-3 bg-slate-800/20 border border-slate-700/50 rounded-lg hover:bg-slate-800/40 transition-colors group">
                           <span className="text-slate-300 font-medium text-sm flex items-center gap-2">
                             <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                             {child.name}
+                            {hasPortfolioFeatures(child.name) && (
+                              <button
+                                onClick={(e) => handleOpenAddProduct(e, child)}
+                                className="text-slate-400 hover:text-green-400 transition-colors bg-slate-700/50 hover:bg-slate-600 rounded-full w-5 h-5 flex items-center justify-center text-sm pb-0.5"
+                                title="ISIN hinzufügen"
+                              >
+                                +
+                              </button>
+                            )}
                           </span>
                           <div className="flex items-center space-x-4">
-                            <span className="text-slate-300 font-semibold text-sm">{formatAmount(child.balance)}</span>
+                            <span className="text-slate-300 font-semibold text-sm">
+                              {pricesLoading ? (
+                                <span className="animate-pulse bg-slate-700/50 rounded h-5 w-20 inline-block align-middle"></span>
+                              ) : (
+                                formatAmount(childTotal)
+                              )}
+                            </span>
                             <div className="flex space-x-2 opacity-60 group-hover:opacity-100 transition-opacity">
                               <button onClick={() => handleEdit(child)} className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -217,7 +425,7 @@ export const VermoegenOverview: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        {child.name.trim().toLowerCase().includes('portfolio') && (
+                        {hasPortfolioFeatures(child.name) && (
                           <div className="pl-6 sm:pl-8 pb-2">
                             <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
                               <div className="flex items-center justify-between gap-3">
@@ -225,16 +433,7 @@ export const VermoegenOverview: React.FC = () => {
                                 <span className="text-xs text-slate-500">{child.products?.length ?? 0} Einträge</span>
                               </div>
                               {child.products && child.products.length > 0 ? (
-                                <div className="space-y-2">
-                                  {child.products.map((product) => (
-                                    <div key={product.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-800/50 px-3 py-2 text-slate-200 text-sm">
-                                      <div className="flex flex-col">
-                                        <span className="font-medium">{product.isin.toUpperCase()}</span>
-                                        <span className="text-slate-400">Anteile: {product.shares}</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                              renderProducts(child)
                               ) : (
                                 <p className="text-slate-500 text-sm">Keine Finanzprodukte hinterlegt. Bearbeiten, um ISIN und Anteile hinzuzufügen.</p>
                               )}
@@ -242,7 +441,7 @@ export const VermoegenOverview: React.FC = () => {
                           </div>
                         )}
                       </React.Fragment>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -384,6 +583,84 @@ export const VermoegenOverview: React.FC = () => {
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             Börse / Konto hinzufügen
           </button>
+        )}
+
+        {/* Kreisdiagramm zur Visualisierung der Vermögensverteilung */}
+        {pricesLoading ? (
+          <div className="h-48 sm:h-64 w-full mt-8 mb-4 flex items-center justify-center">
+            <div className="animate-pulse rounded-full bg-slate-700/30 h-40 w-40 sm:h-56 sm:w-56"></div>
+          </div>
+        ) : pieChartData.length > 0 && (
+          <div className="h-48 sm:h-64 w-full mt-8 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieChartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="60%"
+                  outerRadius="80%"
+                  paddingAngle={2}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Add Product Modal */}
+        {isAddProductModalOpen && targetExchange && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-2xl border border-slate-600/30 p-6 w-full max-w-sm shadow-2xl">
+              <h3 className="text-lg font-semibold text-white mb-4">ISIN zu {targetExchange.name} hinzufügen</h3>
+              <form onSubmit={handleSaveProduct} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">ISIN</label>
+                  <input
+                    type="text"
+                    value={modalIsin}
+                    onChange={(e) => setModalIsin(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="z.B. DE000A1YB8A1"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Anteile</label>
+                  <input
+                    type="text"
+                    value={modalShares}
+                    onChange={(e) => setModalShares(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0,00"
+                    required
+                  />
+                </div>
+                <div className="flex justify-end space-x-3 pt-4 border-t border-slate-700/50 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddProductModalOpen(false); setTargetExchange(null); }}
+                    className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-colors border border-transparent"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-500 rounded-lg transition-colors shadow-lg shadow-green-500/20"
+                  >
+                    Hinzufügen
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
         </div>
       </div>
