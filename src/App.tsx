@@ -8,6 +8,8 @@ import { BilanzPage } from './components/BilanzPage';
 import { TankenPage } from './components/TankenPage';
 import { BusinessOverviewPage } from './components/BusinessOverviewPage';
 import { HMPage } from './components/HMPage';
+import { SettingsPage } from './components/SettingsPage';
+import { DarkAnalyticsPage } from './components/DarkAnalyticsPage';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
@@ -78,6 +80,14 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
               Cashflow
             </Link>
             <div className="w-12 sm:w-16 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-4 sm:mb-6 opacity-60"></div>
+            <nav className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm">
+              <Link to="/bilanzen" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Bilanzen</Link>
+              <Link to="/analytics" className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-cyan-200 hover:bg-cyan-500/20 transition-colors">Analytics</Link>
+              <Link to="/vermoegen" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Vermögen</Link>
+              <Link to="/business" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Business</Link>
+              <Link to="/tanken" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Tanken</Link>
+              <Link to="/settings" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Einstellungen</Link>
+            </nav>
           </div>
         </div>
       )}
@@ -206,6 +216,7 @@ function App() {
             />
           } />
           <Route path="/bilanzen" element={<BilanzPage />} />
+          <Route path="/analytics" element={<DarkAnalyticsPage />} />
           <Route path="/vermoegen" element={<VermoegenOverview />} />
         <Route path="/tanken" element={<TankenPage />} />
           <Route path="/business" element={
@@ -216,6 +227,7 @@ function App() {
             />
           } />
           <Route path="/hm" element={<HMPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
         
         {/* Global Modals */}

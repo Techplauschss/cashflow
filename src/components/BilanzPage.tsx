@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import type { Transaction } from '../types/Transaction';
-import { getAvailableMonths, getTransactionsForMonth, getOneTimeInvestmentsForYear } from '../services/transactionService';
+import { getAllTransactions } from '../services/transactionService';
 
 interface MonthBalance {
   year: number;
@@ -60,7 +60,7 @@ export const BilanzPage = () => {
   };
 
   // Berechnet die Bilanz für Transaktionen
-  const calculateBalance = (transactions: Transaction[]) => {
+  const calculateBalance = useCallback((transactions: Transaction[]) => {
     let income = 0;
     let expenses = 0;
     
@@ -92,76 +92,81 @@ export const BilanzPage = () => {
       expenses,
       balance: income - expenses
     };
-  };
+  }, [showOnlyBusiness]);
 
   // Lädt alle Monate und berechnet Bilanzen
-  const loadBalances = async (isSilent = false) => {
+  const loadBalances = useCallback(async (isSilent = false) => {
     if (!isSilent) setIsLoading(true);
     try {
-      const months = await getAvailableMonths();
-      
-      // Filtere Monate heraus, die in der Zukunft liegen
-      const validMonths = months.filter(m => 
-        m.year < currentYear || (m.year === currentYear && m.month <= currentMonth)
-      );
+      const transactions = await getAllTransactions();
+      const isCurrentOrPastMonth = (transaction: Transaction) => {
+        const date = new Date(transaction.date);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        return year < currentYear || (year === currentYear && month <= currentMonth);
+      };
 
-      const yearsSet = new Set(validMonths.map(m => m.year));
-      yearsSet.add(currentYear); // Immer das aktuelle Jahr hinzufügen, um Einzelinvestitionen des laufenden Jahres zu berücksichtigen
-      const years = [...yearsSet].sort((a, b) => b - a);
-      setAvailableYears(years);
+      const relevantTransactions = transactions
+        .filter(transaction => !isHMTransaction(transaction.description))
+        .filter(isCurrentOrPastMonth);
+      const operationalTransactions = relevantTransactions.filter(transaction => !transaction.isOneTimeInvestment);
+      const investments = relevantTransactions
+        .filter(transaction => transaction.isOneTimeInvestment === true)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      // Lade Transaktionen für alle Monate
-      const balances: MonthBalance[] = [];
-      const allFetchedTransactions: Transaction[] = [];
-      
-      for (const month of validMonths) {
-        try {
-          const transactions = await getTransactionsForMonth(month.year, month.month);
-          allFetchedTransactions.push(...transactions);
-          const balance = calculateBalance(transactions);
-          
-          balances.push({
-            year: month.year,
-            month: month.month,
-            monthYear: month.monthYear,
+      const monthGroups = new Map<string, { year: number; month: number; transactions: Transaction[] }>();
+      operationalTransactions.forEach(transaction => {
+        const date = new Date(transaction.date);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const key = `${year}-${month.toString().padStart(2, '0')}`;
+        const group = monthGroups.get(key) || { year, month, transactions: [] };
+        group.transactions.push(transaction);
+        monthGroups.set(key, group);
+      });
+
+      const balances = Array.from(monthGroups.values())
+        .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month))
+        .map(group => {
+          const balance = calculateBalance(group.transactions);
+          return {
+            year: group.year,
+            month: group.month,
+            monthYear: new Date(group.year, group.month - 1, 1).toLocaleDateString('de-DE', {
+              month: 'long',
+              year: 'numeric',
+            }),
             income: balance.income,
             expenses: balance.expenses,
             balance: balance.balance,
-            savingsRate: calculateSavingsRate(balance.income, balance.expenses)
-          });
-        } catch (error) {
-          console.error(`Fehler beim Laden der Transaktionen für ${month.monthYear}:`, error);
-        }
-      }
-      
-      setMonthBalances(balances);
+            savingsRate: calculateSavingsRate(balance.income, balance.expenses),
+          };
+        });
 
-      // Lade Einmal-Investitionen für alle Jahre
-      const investments: Transaction[] = [];
-      for (const year of years) {
-        try {
-          const yearlyInvestments = await getOneTimeInvestmentsForYear(year);
-          investments.push(...yearlyInvestments);
-          allFetchedTransactions.push(...yearlyInvestments);
-        } catch (error) {
-          console.error(`Fehler beim Laden der Einmal-Investitionen für ${year}:`, error);
-        }
-      }
+      const yearsSet = new Set([
+        ...operationalTransactions.map(transaction => new Date(transaction.date).getFullYear()),
+        ...investments.map(transaction => new Date(transaction.date).getFullYear()),
+      ]);
+      yearsSet.add(currentYear); // Immer das aktuelle Jahr hinzufügen, um Einzelinvestitionen des laufenden Jahres zu berücksichtigen
+      const years = [...yearsSet].sort((a, b) => b - a);
+
+      setAvailableYears(years);
+      setMonthBalances(balances);
       setOneTimeInvestments(investments);
-      setAllTransactions(allFetchedTransactions);
+      setAllTransactions(relevantTransactions);
     } catch (error) {
       console.error('Fehler beim Laden der Monate:', error);
     } finally {
       if (!isSilent) setIsLoading(false);
     }
-  };
+  }, [calculateBalance, currentMonth, currentYear]);
 
   useEffect(() => {
     loadBalances();
     const handleSilentRefresh = () => loadBalances(true);
     window.addEventListener('transaction-changed', handleSilentRefresh);
     return () => window.removeEventListener('transaction-changed', handleSilentRefresh);
-  }, [showOnlyBusiness]); // Lade Daten neu, wenn sich der Business-Filter ändert
+  }, [loadBalances]); // Lade Daten neu, wenn sich der Business-Filter ändert
 
   // Filtert Bilanzen nach ausgewähltem Jahr
   const filteredBalances = selectedYear === 'all' 
@@ -248,12 +253,20 @@ export const BilanzPage = () => {
   ] : [];
 
   // Custom Tooltip für Charts
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ color: string; dataKey: string; value: number }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-lg">
           <p className="text-white font-medium">{`${label}`}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
               {`${entry.dataKey}: ${formatAmount(Math.abs(entry.value))}€`}
             </p>

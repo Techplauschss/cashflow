@@ -93,7 +93,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
     let value = e.target.value;
     
     // Erlaube nur Zahlen, Komma und Punkt
-    value = value.replace(/[^\d,\.]/g, '');
+    value = value.replace(/[^\d,.]/g, '');
     
     // Ersetze Punkte durch Kommas (für Dezimaltrennzeichen)
     value = value.replace(/\./g, ',');

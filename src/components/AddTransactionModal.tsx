@@ -63,14 +63,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
   const formatAmount = (value: string): string => {
     // Entferne alle Zeichen außer Zahlen, Komma und Punkt
-    let cleanValue = value.replace(/[^\d,\.]/g, '');
+    let cleanValue = value.replace(/[^\d,.]/g, '');
     
     // Entferne alle Punkte (Tausender-Trennzeichen)
     cleanValue = cleanValue.replace(/\./g, '');
     
     // Stelle sicher, dass es nur ein Komma gibt
     const parts = cleanValue.split(',');
-    let integerPart = parts[0] || '';
+    const integerPart = parts[0] || '';
     let decimalPart = parts[1];
     
     // Begrenze Dezimalstellen auf 2

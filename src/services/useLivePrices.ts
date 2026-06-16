@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { mapIsinToTicker, getLivePrices } from './eodhdService';
 import type { PortfolioProduct } from './transactionService';
 
+const tickerCache = new Map<string, string | null>();
+
+const normalizeIsin = (isin: string) => isin.trim().toUpperCase();
+
 export const useLivePrices = (products: PortfolioProduct[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -9,7 +13,7 @@ export const useLivePrices = (products: PortfolioProduct[]) => {
   const [failedIsins, setFailedIsins] = useState<Set<string>>(new Set());
 
   // Alle eindeutigen ISINs extrahieren und stringifizieren, um Re-Renders zu minimieren
-  const uniqueIsins = Array.from(new Set(products.map(p => p.isin))).sort();
+  const uniqueIsins = Array.from(new Set(products.map(p => normalizeIsin(p.isin)).filter(Boolean))).sort();
   const isinsKey = JSON.stringify(uniqueIsins);
 
   const fetchPrices = useCallback(async (isSilent = false) => {
@@ -29,7 +33,11 @@ export const useLivePrices = (products: PortfolioProduct[]) => {
 
         // 1. ISINs zu Tickers mappen
         await Promise.all(currentIsins.map(async (isin) => {
-          const ticker = await mapIsinToTicker(isin);
+          const ticker = tickerCache.has(isin)
+            ? tickerCache.get(isin)
+            : await mapIsinToTicker(isin);
+          tickerCache.set(isin, ticker ?? null);
+
           if (ticker) {
             tickerToIsin[ticker] = isin;
             tickersToFetch.push(ticker);
@@ -43,14 +51,21 @@ export const useLivePrices = (products: PortfolioProduct[]) => {
           const livePrices = await getLivePrices(tickersToFetch);
           const isinPrices: Record<string, number> = {};
           
-          Object.entries(livePrices).forEach(([ticker, price]) => {
-            const isin = tickerToIsin[ticker];
+          Object.entries(tickerToIsin).forEach(([ticker, isin]) => {
+            const tickerCode = ticker.split('.')[0];
+            const price = livePrices[ticker] ?? livePrices[tickerCode];
             if (isin) {
-              isinPrices[isin] = price;
+              if (price) {
+                isinPrices[isin] = price;
+              } else {
+                newFailedIsins.add(isin);
+              }
             }
           });
           
           setPrices(isinPrices);
+        } else {
+          setPrices({});
         }
         
         setFailedIsins(newFailedIsins);

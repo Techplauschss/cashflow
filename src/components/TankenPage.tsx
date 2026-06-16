@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Transaction } from '../types/Transaction';
 import { getAllTransactions, updateKilometerstand, updateLiter, updateVehicle } from '../services/transactionService';
 
@@ -12,7 +12,7 @@ export const TankenPage = () => {
     return lowerDescription.includes('tanken') || lowerDescription.includes('tanke') || (lowerDescription.includes('sprit') && !lowerDescription.includes('sprite'));
   };
 
-  const loadTransactions = async (isSilent = false) => {
+  const loadTransactions = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setIsLoading(true);
       const allTrans = await getAllTransactions();
@@ -33,14 +33,14 @@ export const TankenPage = () => {
     } finally {
       if (!isSilent) setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadTransactions();
     const handleSilentRefresh = () => loadTransactions(true);
     window.addEventListener('transaction-changed', handleSilentRefresh);
     return () => window.removeEventListener('transaction-changed', handleSilentRefresh);
-  }, []);
+  }, [loadTransactions]);
 
   const formatAmount = (amount: number): string => {
     return new Intl.NumberFormat('de-DE', {

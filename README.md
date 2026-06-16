@@ -1,12 +1,3 @@
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
 # 💰 Cashflow Tracker
 
 Eine moderne React-Anwendung zum Verwalten von Einnahmen und Ausgaben in Echtzeit mit Firebase Realtime Database.
@@ -17,6 +8,8 @@ Eine moderne React-Anwendung zum Verwalten von Einnahmen und Ausgaben in Echtzei
 - ✅ Kategorisierung von Transaktionen
 - ✅ Echtzeit-Synchronisation mit Firebase
 - ✅ Automatische Saldo-Berechnung
+- ✅ Wiederkehrende Transaktionen
+- ✅ Bilanzen, Dark Analytics und Vermögensübersicht
 - ✅ Responsive Design
 - ✅ TypeScript für Typsicherheit
 
@@ -55,6 +48,10 @@ npm install
 npm run dev
 ```
 
+### 4. Live-Kurse für Finanzprodukte
+
+Für die Vermögensübersicht können Finanzprodukte per ISIN hinterlegt werden. Die App nutzt `VITE_EODHD_API_KEY` für zuverlässiges ISIN-Mapping und fällt ohne Key auf eine Yahoo-Finance-Suche zurück, sofern Yahoo für die ISIN ein abrufbares Symbol bereitstellt.
+
 ## 📱 Verwendung
 
 1. **Neue Transaktion hinzufügen**: Wählen Sie den Typ (Einnahme/Ausgabe), geben Sie Betrag, Beschreibung und Kategorie ein
@@ -67,15 +64,21 @@ npm run dev
 ```
 src/
 ├── components/
-│   ├── TransactionForm.tsx    # Formular für neue Transaktionen
-│   ├── TransactionForm.css
-│   ├── TransactionList.tsx    # Liste aller Transaktionen
-│   └── TransactionList.css
+│   ├── InlineTransactionForm.tsx
+│   ├── LazyTransactionList.tsx
+│   ├── BilanzPage.tsx
+│   ├── DarkAnalyticsPage.tsx
+│   ├── SettingsPage.tsx
+│   └── ...
+├── services/
+│   ├── transactionService.ts
+│   ├── recurringTransactionService.ts
+│   └── eodhdService.ts
 ├── types/
 │   └── Transaction.ts         # TypeScript-Definitionen
 ├── firebase.ts                # Firebase-Konfiguration
-├── App.tsx                    # Haupt-App-Komponente
-└── App.css
+├── App.tsx                    # Haupt-App-Komponente und Routing
+└── styles.css                 # Globale Styles und Tailwind-Basis
 ```
 
 ## 🚀 Verfügbare Scripts
@@ -87,50 +90,18 @@ src/
 
 ## 🔧 Technologien
 
-- **React 18** - UI-Framework
+- **React 19** - UI-Framework
 - **TypeScript** - Typsicherheit
 - **Vite** - Build-Tool
 - **Firebase Realtime Database** - Echtzeit-Datenbank
-- **CSS3** - Styling
+- **Tailwind CSS** - Styling
 
 ## 📝 Nächste Schritte
 
 - [ ] Benutzerauthentifizierung hinzufügen
-- [ ] Erweiterte Kategorieverwaltung
-- [ ] Datenexport (CSV, PDF)
-- [ ] Statistiken und Diagramme
 - [ ] Offline-Unterstützung
-- [ ] Mobile App (React Native)
+- [ ] iOS Shortcut/Widget-Datenansicht
 
 ## 🤝 Beitrag
 
 Falls Sie Verbesserungen vorschlagen möchten, erstellen Sie gerne ein Issue oder Pull Request!
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```

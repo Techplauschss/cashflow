@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
 import { getTransactionsForMonth, getAvailableMonths, isHMTransaction, getOneTimeInvestmentsForYear, updateKilometerstand, updateLiter } from '../services/transactionService';
@@ -20,7 +20,7 @@ export interface LazyTransactionListRef {
 
 interface LazyTransactionListProps {
   onDeleteTransaction?: (transactionId: string) => void;
-  onEditTransaction?: (transaction: any) => void;
+  onEditTransaction?: (transaction: Transaction) => void;
 }
 
 export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransactionListProps>(({ onDeleteTransaction, onEditTransaction }, ref) => {
@@ -41,9 +41,17 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // NEU: Ref für den aktuellen State der Monate, um bei asynchronen Updates keine veralteten Closures zu haben
   const monthsRef = useRef<MonthData[]>(months);
+  const selectedYearRef = useRef(selectedYear);
+  const isOneTimeExpandedRef = useRef(isOneTimeExpanded);
   useEffect(() => {
     monthsRef.current = months;
   }, [months]);
+  useEffect(() => {
+    selectedYearRef.current = selectedYear;
+  }, [selectedYear]);
+  useEffect(() => {
+    isOneTimeExpandedRef.current = isOneTimeExpanded;
+  }, [isOneTimeExpanded]);
 
   // New sub-component for Kilometerstand input
   const KilometerstandInput = ({ transaction }: { transaction: Transaction }) => {
@@ -541,7 +549,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   };
 
   // Ref-Handler mit "Soft Refresh", um Scrollposition und geöffnete Monate zu behalten
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     console.log('🔄 [refreshData] SOFT REFRESH TRIGGERED');
     
     try {
@@ -572,30 +580,33 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
       }));
 
       // Einmal-Investitionen neu laden, falls diese aufgeklappt sind
-      if (isOneTimeExpanded) {
-        await loadOneTimeInvestmentsForYear(selectedYear);
+      if (isOneTimeExpandedRef.current) {
+        const investments = await getOneTimeInvestmentsForYear(selectedYearRef.current);
+        setOneTimeInvestments(investments);
       }
       
       console.log('✅ [refreshData] Soft refresh complete');
     } catch (error) {
       console.error('❌ [refreshData] Error during soft refresh:', error);
     }
-  };
+  }, []);
 
   useImperativeHandle(ref, () => ({
     refreshData: refreshData
-  }));
+  }), [refreshData]);
 
   // Initial laden
   useEffect(() => {
     loadAvailableMonths();
+    // Initial load must run once; later refreshes are handled by explicit events and year changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Listener für Änderungen an Transaktionen (z.B. aus Modal in App.tsx)
   useEffect(() => {
     window.addEventListener('transaction-changed', refreshData);
     return () => window.removeEventListener('transaction-changed', refreshData);
-  }, [selectedYear, isOneTimeExpanded]);
+  }, [refreshData]);
 
   // Jahr-Wechsel Effect
   useEffect(() => {

@@ -72,6 +72,10 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await saveTransaction();
+  };
+
+  const saveTransaction = async () => {
     
     if (!description.trim() || !amount.trim()) {
       alert('Bitte füllen Sie alle Pflichtfelder aus.');
@@ -115,7 +119,7 @@ export const HMModal = ({ isOpen, onClose, onSave }: HMModalProps) => {
     if (e.key === 'Escape') {
       onClose();
     } else if (e.key === 'Enter' && e.ctrlKey) {
-      handleSubmit(e as any);
+      saveTransaction();
     }
   };
 

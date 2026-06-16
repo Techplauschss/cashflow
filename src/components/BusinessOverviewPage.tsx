@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Transaction } from '../types/Transaction';
 import { getTransactionsForMonth, getAvailableMonths, getOneTimeInvestmentsForYear } from '../services/transactionService';
 import { DropdownMenu } from './DropdownMenu';
@@ -20,7 +20,7 @@ interface MonthData {
 
 interface BusinessOverviewPageProps {
   onDeleteTransaction?: (transactionId: string) => void;
-  onEditTransaction?: (transaction: any) => void;
+  onEditTransaction?: (transaction: Transaction) => void;
   onAddTransaction?: (transaction: Partial<Transaction>) => void;
 }
 
@@ -58,19 +58,19 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
   };
 
   // Prüft ob eine Transaktion eine H+M-Transaktion ist
-  const isHMTransaction = (description: string): boolean => {
+  const isHMTransaction = useCallback((description: string): boolean => {
     return description.startsWith('H+') || description.startsWith('M+');
-  };
+  }, []);
 
   // Business-Transaktionen filtern (ohne H+M-Transaktionen)
-  const getBusinessTransactions = (transactions: Transaction[]): Transaction[] => {
+  const getBusinessTransactions = useCallback((transactions: Transaction[]): Transaction[] => {
     return transactions.filter(transaction => 
       transaction.isBusiness === true && !isHMTransaction(transaction.description)
     );
-  };
+  }, [isHMTransaction]);
 
   // Berechnet Bilanz für Business-Transaktionen
-  const calculateBusinessBalance = (transactions: Transaction[]) => {
+  const calculateBusinessBalance = useCallback((transactions: Transaction[]) => {
     const businessTransactions = getBusinessTransactions(transactions);
     let income = 0;
     let expenses = 0;
@@ -90,15 +90,15 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
       balance: income - expenses,
       count: businessTransactions.length
     };
-  };
+  }, [getBusinessTransactions]);
 
   // Transaktionen nach Betrag sortieren
-  const sortTransactionsByAmount = (transactions: Transaction[]): Transaction[] => {
+  const sortTransactionsByAmount = useCallback((transactions: Transaction[]): Transaction[] => {
     return [...transactions].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  };
+  }, []);
 
   // Lade verfügbare Monate
-  const loadAvailableMonths = async () => {
+  const loadAvailableMonths = useCallback(async () => {
     try {
       const availableMonths = await getAvailableMonths();
       
@@ -146,26 +146,14 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
       console.error('Error loading months:', error);
       setIsInitialLoading(false);
     }
-  };
+  }, [calculateBusinessBalance, getBusinessTransactions]);
 
   useEffect(() => {
     loadAvailableMonths();
-  }, []);
-
-  // Listener für Änderungen an Transaktionen (z.B. aus Modal in App.tsx)
-  useEffect(() => {
-    const handleTransactionChanged = () => {
-      loadAvailableMonths();
-      if (isOneTimeExpanded) {
-        loadOneTimeInvestments(selectedYear);
-      }
-    };
-    window.addEventListener('transaction-changed', handleTransactionChanged);
-    return () => window.removeEventListener('transaction-changed', handleTransactionChanged);
-  }, [selectedYear, isOneTimeExpanded]);
+  }, [loadAvailableMonths]);
 
   // Lade Einzelinvestitionen für die Business-Ansicht
-  const loadOneTimeInvestments = async (year: number | 'all') => {
+  const loadOneTimeInvestments = useCallback(async (year: number | 'all') => {
     setIsLoadingOneTime(true);
     try {
       let investments: Transaction[] = [];
@@ -183,7 +171,19 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
     } finally {
       setIsLoadingOneTime(false);
     }
-  };
+  }, [availableYears, isHMTransaction, sortTransactionsByAmount]);
+
+  // Listener für Änderungen an Transaktionen (z.B. aus Modal in App.tsx)
+  useEffect(() => {
+    const handleTransactionChanged = () => {
+      loadAvailableMonths();
+      if (isOneTimeExpanded) {
+        loadOneTimeInvestments(selectedYear);
+      }
+    };
+    window.addEventListener('transaction-changed', handleTransactionChanged);
+    return () => window.removeEventListener('transaction-changed', handleTransactionChanged);
+  }, [selectedYear, isOneTimeExpanded, loadAvailableMonths, loadOneTimeInvestments]);
 
   const toggleOneTime = async () => {
     const newExpandedState = !isOneTimeExpanded;
@@ -198,7 +198,7 @@ export const BusinessOverviewPage = ({ onDeleteTransaction, onEditTransaction, o
     if (selectedYear !== 'all' || availableYears.length > 0) {
       loadOneTimeInvestments(selectedYear);
     }
-  }, [selectedYear, availableYears]);
+  }, [selectedYear, availableYears, loadOneTimeInvestments]);
 
   // Filtere Monate nach ausgewähltem Jahr
   const filteredMonths = selectedYear === 'all' 

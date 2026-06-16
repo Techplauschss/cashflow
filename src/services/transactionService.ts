@@ -2,6 +2,25 @@ import { ref, push, onValue, off, query, orderByChild, startAt, endAt, update, r
 import { database } from '../firebase';
 import type { Transaction, TransactionFormData } from '../types/Transaction';
 
+type ExchangeType = keyof typeof EXCHANGE_NAME_GROUPS;
+type TransactionRecord = Omit<Transaction, 'id'>;
+type ExchangeRecord = Omit<Exchange, 'id'>;
+type TransactionUpdateData = {
+  description?: string;
+  amount?: number;
+  location?: string;
+  type?: 'income' | 'expense';
+  date?: string;
+  isBusiness?: boolean;
+  affectsBalance?: boolean;
+  addedToMain?: boolean;
+  isOneTimeInvestment?: boolean;
+  kilometerstand?: number;
+  liter?: number;
+  vehicle?: 'Auto' | 'Moped' | 'Skoda' | 'Sonstige';
+  sourceExchangeId?: string | null;
+};
+
 const EXCHANGE_NAME_GROUPS: Record<'TR' | 'SP' | 'B' | 'V', string[]> = {
   TR: ['tagesgeld', 'trade republic', 'trade-republic', 'trade republic tagesgeld', 'tr'],
   SP: ['sparkasse', 'sparkasse giro', 'sp'],
@@ -27,6 +46,61 @@ export interface Exchange {
 
 const normalizeName = (value: string) => value.trim().toLowerCase();
 
+const isExchangeType = (value: string): value is ExchangeType => value in EXCHANGE_NAME_GROUPS;
+
+const parseTransactionAmount = (value: string): number => {
+  const normalized = value.trim().replace(/[^\d,.-]/g, '');
+  if (!normalized) {
+    throw new Error('Bitte geben Sie einen gültigen Betrag ein.');
+  }
+
+  const hasComma = normalized.includes(',');
+  const hasDot = normalized.includes('.');
+  let parseable = normalized;
+
+  if (hasComma) {
+    parseable = normalized.replace(/\./g, '').replace(',', '.');
+  } else if (hasDot) {
+    const dotParts = normalized.split('.');
+    if (dotParts.length > 2) {
+      parseable = dotParts.join('');
+    } else {
+      const [integerPart, decimalPart] = dotParts;
+      const isLikelyThousandsSeparator =
+        decimalPart.length === 3 && integerPart.length > 0 && integerPart.length <= 3;
+      parseable = isLikelyThousandsSeparator ? integerPart + decimalPart : normalized;
+    }
+  }
+
+  const amount = Number.parseFloat(parseable);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Bitte geben Sie einen gültigen Betrag ein.');
+  }
+
+  return amount;
+};
+
+const mapTransactions = (data: Record<string, TransactionRecord>): Transaction[] =>
+  Object.entries(data).map(([id, transaction]) => ({
+    id,
+    ...transaction,
+  }));
+
+const mapExchanges = (data: Record<string, ExchangeRecord>): Exchange[] =>
+  Object.entries(data).map(([id, exchange]) => ({
+    id,
+    ...exchange,
+  }));
+
+const getTransactionBalanceImpact = (transaction: Pick<Transaction, 'type' | 'amount' | 'affectsBalance'>): number => {
+  if (transaction.affectsBalance === false) return 0;
+
+  const amount = Math.abs(Number(transaction.amount));
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+
+  return transaction.type === 'expense' ? -amount : amount;
+};
+
 const findExchangeByNameGroup = (exchanges: Exchange[], names: string[]) => {
   const normalizedNames = names.map(normalizeName);
 
@@ -41,8 +115,7 @@ export const findExchangeByType = async (type: 'TR' | 'SP' | 'B' | 'V'): Promise
   const snapshot = await get(exchangesRef);
   if (!snapshot.exists()) return null;
 
-  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
-    .map(([id, val]) => ({ id, ...val }));
+  const exchanges = mapExchanges(snapshot.val() as Record<string, ExchangeRecord>);
 
   return findExchangeByNameGroup(exchanges, EXCHANGE_NAME_GROUPS[type]);
 };
@@ -52,10 +125,13 @@ const findDefaultAssetExchange = async (): Promise<Exchange | null> => {
   const snapshot = await get(exchangesRef);
   if (!snapshot.exists()) return null;
 
-  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
-    .map(([id, val]) => ({ id, ...val }));
+  const exchanges = mapExchanges(snapshot.val() as Record<string, ExchangeRecord>);
 
-  return findExchangeByType('TR') || findExchangeByType('SP') || findExchangeByType('B') || exchanges[0] || null;
+  return findExchangeByNameGroup(exchanges, EXCHANGE_NAME_GROUPS.TR)
+    || findExchangeByNameGroup(exchanges, EXCHANGE_NAME_GROUPS.SP)
+    || findExchangeByNameGroup(exchanges, EXCHANGE_NAME_GROUPS.B)
+    || exchanges[0]
+    || null;
 };
 
 const updateExchangeBalance = async (exchangeId: string, delta: number): Promise<void> => {
@@ -74,21 +150,73 @@ const updateExchangeBalance = async (exchangeId: string, delta: number): Promise
   });
 };
 
+const applyExchangeBalanceChanges = async (changes: Array<{ exchangeId: string; delta: number }>): Promise<void> => {
+  const appliedChanges: Array<{ exchangeId: string; delta: number }> = [];
+
+  try {
+    for (const change of changes) {
+      if (change.delta === 0) continue;
+      await updateExchangeBalance(change.exchangeId, change.delta);
+      appliedChanges.push(change);
+    }
+  } catch (error) {
+    for (const change of appliedChanges.reverse()) {
+      try {
+        await updateExchangeBalance(change.exchangeId, -change.delta);
+      } catch (rollbackError) {
+        console.error('❌ [applyExchangeBalanceChanges] Error rolling back exchange balance:', rollbackError);
+      }
+    }
+    throw error;
+  }
+};
+
+const buildBalanceChanges = (
+  previousExchangeId: string | null,
+  previousImpact: number,
+  nextExchangeId: string | null,
+  nextImpact: number,
+): Array<{ exchangeId: string; delta: number }> => {
+  if (!previousExchangeId && !nextExchangeId) return [];
+
+  if (previousExchangeId && nextExchangeId && previousExchangeId === nextExchangeId) {
+    const delta = nextImpact - previousImpact;
+    return delta === 0 ? [] : [{ exchangeId: nextExchangeId, delta }];
+  }
+
+  return [
+    ...(previousExchangeId && previousImpact !== 0
+      ? [{ exchangeId: previousExchangeId, delta: -previousImpact }]
+      : []),
+    ...(nextExchangeId && nextImpact !== 0
+      ? [{ exchangeId: nextExchangeId, delta: nextImpact }]
+      : []),
+  ];
+};
+
+const resolveTransactionExchangeId = async (sourceExchangeId?: string | null): Promise<string | null> => {
+  if (sourceExchangeId) return sourceExchangeId;
+  return (await findDefaultAssetExchange())?.id || null;
+};
+
 // Funktion zum Hinzufügen einer neuen Transaktion (normale, nicht geplante)
 export const addTransaction = async (transactionData: TransactionFormData): Promise<string> => {
   const transactionsRef = ref(database, 'transactions');
   
   // Konvertiere den Betrag von String zu Number
-  const amount = parseFloat(transactionData.amount.replace(/\./g, '').replace(',', '.'));
+  const amount = parseTransactionAmount(transactionData.amount);
+  const affectsBalance = transactionData.affectsBalance ?? true;
   let selectedExchange: Exchange | null = null;
 
-  if (transactionData.sourceExchangeType) {
+  if (!affectsBalance) {
+    selectedExchange = null;
+  } else if (transactionData.sourceExchangeType) {
     // Zuerst versuchen, über Shortcut zu finden
     selectedExchange = await findExchangeByShortcut(transactionData.sourceExchangeType);
     
     // Fallback auf feste Zuordnungen wenn kein Shortcut gefunden
-    if (!selectedExchange) {
-      selectedExchange = await findExchangeByType(transactionData.sourceExchangeType as 'TR' | 'SP' | 'B' | 'V');
+    if (!selectedExchange && isExchangeType(transactionData.sourceExchangeType)) {
+      selectedExchange = await findExchangeByType(transactionData.sourceExchangeType);
     }
   } else {
     selectedExchange = await findDefaultAssetExchange();
@@ -104,6 +232,7 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     isPlanned: false, // Normale Transaktionen sind nicht geplant
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
     isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition Flag
+    affectsBalance,
     ...(selectedExchange ? { sourceExchangeId: selectedExchange.id } : {}),
   };
 
@@ -118,9 +247,9 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     console.log('✅ [addTransaction] Successfully added transaction with ID:', newTransactionRef.key);
 
     if (selectedExchange) {
-      const delta = transaction.type === 'expense' ? -amount : amount;
+      const delta = getTransactionBalanceImpact(transaction);
       try {
-        await updateExchangeBalance(selectedExchange.id, delta);
+        await applyExchangeBalanceChanges([{ exchangeId: selectedExchange.id, delta }]);
       } catch (balanceError) {
         console.error('❌ [addTransaction] Error updating selected asset exchange balance:', balanceError);
         await remove(newTransactionRef);
@@ -131,7 +260,7 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
     return newTransactionRef.key!;
   } catch (error) {
     console.error('❌ [addTransaction] Error adding transaction:', error);
-    throw new Error('Fehler beim Hinzufügen der Transaktion');
+    throw new Error(error instanceof Error ? error.message : 'Fehler beim Hinzufügen der Transaktion');
   }
 };
 
@@ -140,8 +269,7 @@ export const findExchangeByShortcut = async (shortcut: string): Promise<Exchange
   const snapshot = await get(exchangesRef);
   if (!snapshot.exists()) return null;
 
-  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
-    .map(([id, val]) => ({ id, ...val }));
+  const exchanges = mapExchanges(snapshot.val() as Record<string, ExchangeRecord>);
 
   return exchanges.find(ex => ex.shortcut?.toUpperCase() === shortcut.toUpperCase()) || null;
 };
@@ -158,11 +286,7 @@ export const subscribeToTransactions = (callback: (transactions: Transaction[]) 
   const unsubscribe = onValue(transactionsRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      const transactions: Transaction[] = Object.entries(data)
-        .map(([id, transaction]) => ({
-          id,
-          ...(transaction as Omit<Transaction, 'id'>),
-        }))
+      const transactions = mapTransactions(data as Record<string, TransactionRecord>)
         .filter(transaction => !transaction.isPlanned); // Filtere geplante Transaktionen aus
       callback(transactions);
     } else {
@@ -200,10 +324,7 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
       console.log(`📊 [getTransactionsForMonth] Raw data from Firebase:`, data);
       
       if (data) {
-        const allTransactions = Object.entries(data).map(([id, transaction]) => ({
-          id,
-          ...(transaction as Omit<Transaction, 'id'>),
-        }));
+        const allTransactions = mapTransactions(data as Record<string, TransactionRecord>);
         
         console.log(`📋 [getTransactionsForMonth] All transactions before filtering (${allTransactions.length}):`, allTransactions);
         
@@ -272,8 +393,7 @@ export const getExchangesWithShortcuts = async (): Promise<Array<{shortcut: stri
   const snapshot = await get(exchangesRef);
   if (!snapshot.exists()) return [];
 
-  const exchanges: Exchange[] = Object.entries(snapshot.val() as Record<string, any>)
-    .map(([id, val]) => ({ id, ...val }));
+  const exchanges = mapExchanges(snapshot.val() as Record<string, ExchangeRecord>);
 
   return exchanges
     .filter(ex => ex.shortcut)
@@ -286,10 +406,7 @@ export const subscribeToExchanges = (callback: (exchanges: Exchange[]) => void):
   const unsubscribe = onValue(exchangesRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      const exchanges: Exchange[] = Object.entries(data).map(([id, val]: [string, any]) => ({
-        id,
-        ...val
-      }));
+      const exchanges = mapExchanges(data as Record<string, ExchangeRecord>);
       // Nach dem höchsten Saldo absteigend sortieren
       callback(exchanges.sort((a, b) => b.balance - a.balance));
     } else {
@@ -307,10 +424,7 @@ export const getAvailableMonths = async (includeHM: boolean = false): Promise<Ar
     onValue(transactionsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
-          id,
-          ...(transaction as Omit<Transaction, 'id'>),
-        }));
+        const transactions = mapTransactions(data as Record<string, TransactionRecord>);
         
         // Filtere H+M Transaktionen aus (basierend auf Description)
         const filteredTransactions = transactions.filter(transaction => 
@@ -399,51 +513,54 @@ export const deleteTransaction = async (transactionId: string): Promise<void> =>
   try {
     const snapshot = await get(transactionRef);
     if (!snapshot.exists()) {
-      return;
+      throw new Error('Transaktion nicht gefunden');
     }
 
-    const transaction = snapshot.val() as Transaction;
-    const sourceExchangeId = transaction.sourceExchangeId;
-    const exchangeId = sourceExchangeId || (await findDefaultAssetExchange())?.id;
+    const transaction = { id: transactionId, ...(snapshot.val() as TransactionRecord) };
+    const exchangeId = await resolveTransactionExchangeId(transaction.sourceExchangeId);
+    const revertDelta = -getTransactionBalanceImpact(transaction);
 
-    if (exchangeId && transaction.amount > 0) {
-      const revertDelta = transaction.type === 'expense' ? transaction.amount : -transaction.amount;
-      try {
-        await updateExchangeBalance(exchangeId, revertDelta);
-      } catch (balanceError) {
-        console.error('❌ [deleteTransaction] Error reverting selected asset exchange balance:', balanceError);
-        throw new Error('Fehler beim Zurücksetzen des Vermögenskontos. Die Transaktion wurde nicht gelöscht.');
+    if (exchangeId && revertDelta !== 0) {
+      await applyExchangeBalanceChanges([{ exchangeId, delta: revertDelta }]);
+    }
+
+    try {
+      await remove(transactionRef);
+    } catch (removeError) {
+      if (exchangeId && revertDelta !== 0) {
+        await applyExchangeBalanceChanges([{ exchangeId, delta: -revertDelta }]);
       }
+      throw removeError;
     }
-
-    await remove(transactionRef);
   } catch (error) {
     console.error('Error deleting transaction:', error);
-    throw new Error('Fehler beim Löschen der Transaktion');
+    throw new Error(error instanceof Error ? error.message : 'Fehler beim Löschen der Transaktion');
   }
 };
 
 // Funktion zum Aktualisieren einer Transaktion
 export const updateTransaction = async (
   transactionId: string, 
-  updatedData: {
-    description?: string;
-    amount?: number;
-    location?: string;
-    type?: 'income' | 'expense';
-    date?: string;
-    isBusiness?: boolean;
-    addedToMain?: boolean;
-    isOneTimeInvestment?: boolean;
-    kilometerstand?: number;
-    liter?: number;
-    vehicle?: 'Auto' | 'Moped' | 'Skoda' | 'Sonstige';
-  }
+  updatedData: TransactionUpdateData
 ): Promise<void> => {
   const transactionRef = ref(database, `transactions/${transactionId}`);
   
   try {
-    const updates: Record<string, any> = {
+    const snapshot = await get(transactionRef);
+    if (!snapshot.exists()) {
+      throw new Error('Transaktion nicht gefunden');
+    }
+
+    const existingTransaction: Transaction = {
+      id: transactionId,
+      ...(snapshot.val() as TransactionRecord),
+    };
+
+    if (updatedData.amount !== undefined && (!Number.isFinite(updatedData.amount) || updatedData.amount <= 0)) {
+      throw new Error('Bitte geben Sie einen gültigen Betrag ein.');
+    }
+
+    const updates: Partial<Transaction> = {
       lastModified: Date.now()
     };
     
@@ -454,16 +571,40 @@ export const updateTransaction = async (
     if (updatedData.type !== undefined) updates.type = updatedData.type;
     if (updatedData.date !== undefined) updates.date = updatedData.date;
     if (updatedData.isBusiness !== undefined) updates.isBusiness = updatedData.isBusiness;
+    if (updatedData.affectsBalance !== undefined) updates.affectsBalance = updatedData.affectsBalance;
     if (updatedData.addedToMain !== undefined) updates.addedToMain = updatedData.addedToMain;
     if (updatedData.isOneTimeInvestment !== undefined) updates.isOneTimeInvestment = updatedData.isOneTimeInvestment;
     if (updatedData.kilometerstand !== undefined) updates.kilometerstand = updatedData.kilometerstand;
     if (updatedData.liter !== undefined) updates.liter = updatedData.liter;
     if (updatedData.vehicle !== undefined) updates.vehicle = updatedData.vehicle;
-    
-    await update(transactionRef, updates);
+    if (updatedData.sourceExchangeId !== undefined) updates.sourceExchangeId = updatedData.sourceExchangeId || undefined;
+
+    const nextTransaction: Transaction = {
+      ...existingTransaction,
+      ...updates,
+    };
+    const previousExchangeId = await resolveTransactionExchangeId(existingTransaction.sourceExchangeId);
+    const nextExchangeId = await resolveTransactionExchangeId(nextTransaction.sourceExchangeId);
+    const balanceChanges = buildBalanceChanges(
+      previousExchangeId,
+      getTransactionBalanceImpact(existingTransaction),
+      nextExchangeId,
+      getTransactionBalanceImpact(nextTransaction),
+    );
+    await applyExchangeBalanceChanges(balanceChanges);
+
+    try {
+      await update(transactionRef, updates);
+    } catch (updateError) {
+      await applyExchangeBalanceChanges(balanceChanges.map(change => ({
+        exchangeId: change.exchangeId,
+        delta: -change.delta,
+      })));
+      throw updateError;
+    }
   } catch (error) {
     console.error('Error updating transaction:', error);
-    throw new Error('Fehler beim Aktualisieren der Transaktion');
+    throw new Error(error instanceof Error ? error.message : 'Fehler beim Aktualisieren der Transaktion');
   }
 };
 
@@ -474,7 +615,7 @@ export const addPlannedTransaction = async (transactionData: TransactionFormData
   const plannedTransactionsRef = ref(database, 'plannedTransactions');
   
   // Konvertiere den Betrag von String zu Number
-  const amount = parseFloat(transactionData.amount.replace(/\./g, '').replace(',', '.'));
+  const amount = parseTransactionAmount(transactionData.amount);
   
   const transaction: Omit<Transaction, 'id'> = {
     type: transactionData.type,
@@ -486,6 +627,7 @@ export const addPlannedTransaction = async (transactionData: TransactionFormData
     isPlanned: true,
     isBusiness: transactionData.isBusiness || false, // Business-Flag hinzufügen
     isOneTimeInvestment: transactionData.isOneTimeInvestment || false, // Einmal-Investition-Flag hinzufügen
+    affectsBalance: transactionData.affectsBalance ?? false,
   };
 
   if (transactionData.kilometerstand !== undefined) transaction.kilometerstand = transactionData.kilometerstand;
@@ -509,10 +651,7 @@ export const getPlannedTransactions = async (): Promise<Transaction[]> => {
     onValue(plannedTransactionsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
-          id,
-          ...(transaction as Omit<Transaction, 'id'>),
-        }));
+        const transactions = mapTransactions(data as Record<string, TransactionRecord>);
         resolve(transactions);
       } else {
         resolve([]);
@@ -587,11 +726,7 @@ export const getAllTransactions = async (): Promise<Transaction[]> => {
     onValue(transactionsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const transactions: Transaction[] = Object.entries(data)
-          .map(([id, transaction]) => ({
-            id,
-            ...(transaction as Omit<Transaction, 'id'>),
-          }))
+        const transactions = mapTransactions(data as Record<string, TransactionRecord>)
           .filter(transaction => !transaction.isPlanned) // Filtere geplante Transaktionen aus
           .sort((a, b) => b.timestamp - a.timestamp); // Sortiere nach Timestamp, neueste zuerst
         resolve(transactions);
@@ -627,10 +762,8 @@ export const getOneTimeInvestmentsForYear = async (year: number): Promise<Transa
       const data = snapshot.val();
       
       if (data) {
-        const transactions: Transaction[] = Object.entries(data).map(([id, transaction]) => ({
-          id,
-          ...(transaction as Omit<Transaction, 'id'>),
-        })).filter(t => !t.isPlanned && t.isOneTimeInvestment === true);
+        const transactions = mapTransactions(data as Record<string, TransactionRecord>)
+          .filter(t => !t.isPlanned && t.isOneTimeInvestment === true);
         
         // Sortiere absteigend nach Datum
         transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

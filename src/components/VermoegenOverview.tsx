@@ -33,10 +33,10 @@ export const VermoegenOverview: React.FC = () => {
     return exchanges.flatMap(ex => ex.products || []);
   }, [exchanges]);
 
-  const { prices, loading: pricesLoading, failedIsins, refetchPrices } = useLivePrices(allProducts);
+  const { prices, loading: pricesLoading, error: pricesError, failedIsins, refetchPrices } = useLivePrices(allProducts);
 
   const getProductValue = (product: PortfolioProduct) => {
-    const price = prices[product.isin];
+    const price = prices[product.isin.toUpperCase()];
     return price ? price * product.shares : 0;
   };
 
@@ -57,7 +57,7 @@ export const VermoegenOverview: React.FC = () => {
     let value = e.target.value;
 
     // 1. Entferne alle Zeichen, die keine Ziffern, Komma, Punkt oder Minus sind
-    value = value.replace(/[^\d,\.-]/g, '');
+    value = value.replace(/[^\d,.-]/g, '');
 
     // 2. Behandle das Minuszeichen: Nur am Anfang erlaubt
     if (value.startsWith('-')) {
@@ -186,7 +186,7 @@ export const VermoegenOverview: React.FC = () => {
     e.preventDefault();
     if (!targetExchange) return;
 
-    const isin = modalIsin.trim();
+    const isin = modalIsin.trim().toUpperCase();
     const shares = parseFloat(modalShares.replace(',', '.'));
     
     if (!isin || Number.isNaN(shares) || shares <= 0) {
@@ -232,14 +232,15 @@ export const VermoegenOverview: React.FC = () => {
   const renderProducts = (exchange: Exchange) => (
     <div className="space-y-2">
       {(exchange.products || []).map((product) => {
-        const livePrice = prices[product.isin];
-        const isFailed = failedIsins.has(product.isin);
+        const normalizedIsin = product.isin.toUpperCase();
+        const livePrice = prices[normalizedIsin];
+        const isFailed = failedIsins.has(normalizedIsin);
         const totalValue = livePrice ? livePrice * product.shares : 0;
         
         return (
           <div key={product.id} className="group flex items-center justify-between gap-3 rounded-lg bg-slate-800/50 hover:bg-slate-800/70 transition-colors px-3 py-2 text-slate-200 text-sm">
             <div className="flex flex-col">
-              <span className="font-medium">{product.isin.toUpperCase()}</span>
+              <span className="font-medium">{normalizedIsin}</span>
               <span className="text-slate-400">Anteile: {product.shares}</span>
             </div>
             <div className="flex items-center gap-3">
@@ -275,7 +276,7 @@ export const VermoegenOverview: React.FC = () => {
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#6366f1', '#ec4899', '#14b8a6', '#f43f5e', '#06b6d4', '#f97316'];
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number }> }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-slate-800 border border-slate-600 rounded-lg p-2 shadow-lg z-50">
@@ -305,6 +306,11 @@ export const VermoegenOverview: React.FC = () => {
               <svg className={`w-4 h-4 sm:w-5 sm:h-5 ${pricesLoading ? 'animate-spin text-blue-400' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </button>
           </div>
+          {pricesError && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              {pricesError}
+            </div>
+          )}
           <div className="text-right">
             <div className="flex items-center justify-end gap-2">
               <p className="text-sm text-slate-400">Gesamtvermögen</p>

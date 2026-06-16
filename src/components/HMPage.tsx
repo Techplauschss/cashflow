@@ -134,6 +134,7 @@ export const HMPage = () => {
         amount: data.amount.toFixed(2).replace('.', ','),
         description: prefixedDescription,
         location: data.location,
+        affectsBalance: false,
       });
 
       console.log('H+M Transaktion erfolgreich gespeichert');
@@ -173,7 +174,8 @@ export const HMPage = () => {
         amount: updatedData.amount,
         location: updatedData.location,
         type: 'expense',
-        date: updatedData.date
+        date: updatedData.date,
+        affectsBalance: false,
       });
 
       setShowEditModal(false);
@@ -227,19 +229,39 @@ export const HMPage = () => {
       // Format amount as German decimal string
       const formattedAmount = amount.toFixed(2).replace('.', ',');
       
-      await addTransaction({
-        type: transaction.type,
-        amount: formattedAmount,
-        description: cleanDescription,
-        location: transaction.location,
-        date: transaction.date,
-        isBusiness: false, // Add as personal transaction
-      });
+      const originalAffectedBalance = transaction.affectsBalance !== false;
+      let mainTransactionId: string | null = null;
+      if (originalAffectedBalance) {
+        await updateTransaction(transaction.id, {
+          affectsBalance: false,
+        });
+      }
       
-      // Mark this H+M transaction as added to main
-      await updateTransaction(transaction.id, {
-        addedToMain: true
-      });
+      try {
+        mainTransactionId = await addTransaction({
+          type: transaction.type,
+          amount: formattedAmount,
+          description: cleanDescription,
+          location: transaction.location,
+          date: transaction.date,
+          isBusiness: false, // Add as personal transaction
+        });
+
+        // Mark this H+M transaction as added to main
+        await updateTransaction(transaction.id, {
+          addedToMain: true
+        });
+      } catch (error) {
+        if (mainTransactionId) {
+          await deleteTransaction(mainTransactionId);
+        }
+        if (originalAffectedBalance) {
+          await updateTransaction(transaction.id, {
+            affectsBalance: true,
+          });
+        }
+        throw error;
+      }
       
       console.log('Transaktion erfolgreich zur Main-Liste hinzugefügt');
     } catch (error) {
