@@ -151,18 +151,19 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
   };
 
   return (
-    <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-3 sm:p-6 shadow-2xl">
-      <form className="space-y-3 sm:space-y-6" onSubmit={handleSubmit}>
-        <div className="block sm:hidden space-y-3">
+    <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-3.5 shadow-2xl sm:p-6">
+      <form className="space-y-3.5 sm:space-y-6" onSubmit={handleSubmit}>
+        <div className="block space-y-3 sm:hidden">
           <div className="relative">
-            <span className="absolute left-3 top-2.5 text-slate-400">€</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">€</span>
             <input
               type="text"
               id="amount"
               value={amount}
               onChange={handleAmountChange}
               onKeyDown={handleAmountKeyDown}
-              className="w-full pl-8 pr-4 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
+              inputMode="decimal"
+              className="w-full rounded-xl border border-slate-600/70 bg-slate-900/60 py-3 pl-8 pr-4 text-base text-white placeholder-slate-500 shadow-inner shadow-black/10 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="0,00"
             />
           </div>
@@ -171,26 +172,26 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
-            placeholder="Titel"
+            className="w-full rounded-xl border border-slate-600/70 bg-slate-900/60 px-3.5 py-3 text-base text-white placeholder-slate-500 shadow-inner shadow-black/10 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Beschreibung"
           />
 
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             <div className="col-span-2">
               <input
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
+              className="w-full rounded-xl border border-slate-600/70 bg-slate-900/60 px-3.5 py-3 text-base text-white placeholder-slate-500 shadow-inner shadow-black/10 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Ort"
               />
             </div>
-            <div className="col-span-1 flex flex-col items-center justify-center gap-2">
+          <div className="col-span-1 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setIsBusiness(!isBusiness)}
-                className={`w-8 h-8 rounded-lg font-bold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isBusiness ? 'bg-blue-600 text-white' : 'bg-slate-600 text-slate-300'
+              className={`h-11 rounded-xl text-sm font-bold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                isBusiness ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/30' : 'bg-slate-700/80 text-slate-300'
                 }`}
                 title={isBusiness ? 'Geschäftstransaktion' : 'Private Transaktion'}
               >
@@ -199,19 +200,20 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
               <button
                 type="button"
                 onClick={() => setAssetType(getNextAssetType())}
-                className="w-10 h-8 rounded-lg text-xs font-semibold text-slate-200 bg-slate-700 hover:bg-slate-600 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-11 rounded-xl bg-slate-700/90 text-xs font-semibold text-slate-200 transition-all hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title={`Asset wählen: ${getCurrentShortcutName()}`}
               >
                 {assetType}
               </button>
             </div>
-            <div className="col-span-2 flex items-center justify-center">
+            <div className="col-span-1 flex items-center justify-center rounded-xl bg-slate-900/35 px-2">
               <button
                 type="button"
                 onClick={() => setType(type === 'E' ? 'A' : 'E')}
                 className={`relative inline-flex h-9 w-16 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   type === 'E' ? 'bg-green-600' : 'bg-red-600'
                 }`}
+                aria-label={type === 'E' ? 'Einnahme ausgewählt' : 'Ausgabe ausgewählt'}
               >
                 <span
                   className={`inline-block h-7 w-7 transform rounded-full bg-white transition-transform duration-200 ${
@@ -302,7 +304,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold py-2.5 sm:py-4 px-6 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 text-base sm:text-base"
+          className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-3.5 text-base font-semibold text-white shadow-lg shadow-blue-950/20 transition-all duration-200 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:from-gray-600 disabled:to-gray-700 sm:rounded-lg sm:py-4"
         >
           {isLoading ? 'Wird hinzugefügt...' : 'Transaktion hinzufügen'}
         </button>

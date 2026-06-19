@@ -1,22 +1,21 @@
 import './styles.css';
-import { useState, useRef, useEffect } from 'react';
+import { Suspense, lazy, useState, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LazyTransactionList, type LazyTransactionListRef } from './components/LazyTransactionList';
-import { VermoegenOverview } from './components/VermoegenOverview';
 import { InlineTransactionForm } from './components/InlineTransactionForm';
-import { BilanzPage } from './components/BilanzPage';
-import { TankenPage } from './components/TankenPage';
-import { BusinessOverviewPage } from './components/BusinessOverviewPage';
-import { HMPage } from './components/HMPage';
-import { SettingsPage } from './components/SettingsPage';
-import { DarkAnalyticsPage } from './components/DarkAnalyticsPage';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { addTransaction, deleteTransaction, updateTransaction } from './services/transactionService';
 import type { Transaction } from './types/Transaction';
 
-
+const BilanzPage = lazy(() => import('./components/BilanzPage').then(module => ({ default: module.BilanzPage })));
+const DarkAnalyticsPage = lazy(() => import('./components/DarkAnalyticsPage').then(module => ({ default: module.DarkAnalyticsPage })));
+const VermoegenOverview = lazy(() => import('./components/VermoegenOverview').then(module => ({ default: module.VermoegenOverview })));
+const TankenPage = lazy(() => import('./components/TankenPage').then(module => ({ default: module.TankenPage })));
+const BusinessOverviewPage = lazy(() => import('./components/BusinessOverviewPage').then(module => ({ default: module.BusinessOverviewPage })));
+const HMPage = lazy(() => import('./components/HMPage').then(module => ({ default: module.HMPage })));
+const SettingsPage = lazy(() => import('./components/SettingsPage').then(module => ({ default: module.SettingsPage })));
 
 const UI_MESSAGES = {
   ADD_ERROR: 'Fehler beim Hinzufügen der Transaktion. Bitte versuchen Sie es erneut.',
@@ -24,6 +23,21 @@ const UI_MESSAGES = {
   DELETE_ERROR: 'Fehler beim Löschen der Transaktion. Bitte versuchen Sie es erneut.',
   REQUIRED_FIELDS: 'Bitte füllen Sie alle Pflichtfelder aus.',
 };
+
+const PageFallback = () => (
+  <div className="flex min-h-[40vh] items-center justify-center px-4 text-slate-300">
+    Seite wird geladen...
+  </div>
+);
+
+const navItems = [
+  { to: '/bilanzen', label: 'Bilanzen' },
+  { to: '/analytics', label: 'Analytics' },
+  { to: '/vermoegen', label: 'Vermögen' },
+  { to: '/business', label: 'Business' },
+  { to: '/tanken', label: 'Tanken' },
+  { to: '/settings', label: 'Einstellungen' },
+];
 
 function HomePage({
   onDeleteTransaction,
@@ -36,10 +50,10 @@ function HomePage({
   const transactionListRef = useRef<LazyTransactionListRef>(null);
 
   return (
-    <div className="flex items-center justify-center px-3 sm:px-4 pb-4 sm:pb-8">
+    <main className="flex items-center justify-center app-safe-area pb-4 pt-4 sm:px-4 sm:pb-8 sm:pt-0">
       <div className="w-full max-w-4xl">
         {/* Input Form - Mobile optimiert */}
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <InlineTransactionForm onSaved={async () => {
               if (transactionListRef.current) await transactionListRef.current.refreshData();
             }} />
@@ -59,7 +73,7 @@ function HomePage({
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -68,28 +82,37 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const isHMPage = location.pathname === '/hm';
 
   return (
-    <div className="min-h-screen bg-transparent">
+    <div className="min-h-dvh bg-transparent app-bottom-safe">
       {/* Global Header mit Navigation - nur anzeigen wenn nicht auf H+M Seite */}
       {!isHMPage && (
-        <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8">
-          <div className="text-center mb-6 sm:mb-8">
+        <header className="sticky top-0 z-30 w-full border-b border-white/5 bg-slate-950/70 backdrop-blur-xl sm:static sm:border-b-0 sm:bg-transparent sm:backdrop-blur-none">
+          <div className="w-full max-w-4xl mx-auto app-safe-area pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-4 sm:pt-8">
+          <div className="text-center pb-3 sm:mb-8 sm:pb-0">
             <Link 
               to="/" 
               className="inline-block text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent mb-2 sm:mb-3 tracking-tight hover:from-blue-300 hover:via-purple-400 hover:to-cyan-300 transition-all duration-200"
             >
               Cashflow
             </Link>
-            <div className="w-12 sm:w-16 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-4 sm:mb-6 opacity-60"></div>
-            <nav className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm">
-              <Link to="/bilanzen" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Bilanzen</Link>
-              <Link to="/analytics" className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-cyan-200 hover:bg-cyan-500/20 transition-colors">Analytics</Link>
-              <Link to="/vermoegen" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Vermögen</Link>
-              <Link to="/business" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Business</Link>
-              <Link to="/tanken" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Tanken</Link>
-              <Link to="/settings" className="rounded-full bg-white/5 px-3 py-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors">Einstellungen</Link>
+            <div className="w-12 sm:w-16 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-3 sm:mb-6 opacity-60"></div>
+            <nav className="-mx-3 flex snap-x items-center gap-2 overflow-x-auto px-3 pb-1 text-xs mobile-scrollbar-none sm:mx-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:pb-0 sm:text-sm">
+              {navItems.map(item => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`shrink-0 snap-start rounded-full border px-3.5 py-2 font-medium transition-colors ${
+                    location.pathname === item.to
+                      ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-lg shadow-cyan-950/20'
+                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
-        </div>
+          </div>
+        </header>
       )}
       
       {children}
@@ -105,10 +128,6 @@ function App() {
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTransactionProps, setNewTransactionProps] = useState<Partial<Transaction>>({});
-
-  useEffect(() => {
-    console.log('App Version: 1.1.0 loaded');
-  }, []);
 
   // App-level transaction handlers
   const handleDeleteTransaction = async (transactionId: string) => {
@@ -208,27 +227,29 @@ function App() {
   return (
     <Router>
       <AppLayout>
-        <Routes>
-          <Route path="/" element={
-            <HomePage 
-              onDeleteTransaction={handleDeleteTransaction}
-              onEditTransaction={handleEditTransaction}
-            />
-          } />
-          <Route path="/bilanzen" element={<BilanzPage />} />
-          <Route path="/analytics" element={<DarkAnalyticsPage />} />
-          <Route path="/vermoegen" element={<VermoegenOverview />} />
-        <Route path="/tanken" element={<TankenPage />} />
-          <Route path="/business" element={
-            <BusinessOverviewPage 
-              onDeleteTransaction={handleDeleteTransaction}
-              onEditTransaction={handleEditTransaction}
-              onAddTransaction={handleAddTransaction}
-            />
-          } />
-          <Route path="/hm" element={<HMPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={
+              <HomePage
+                onDeleteTransaction={handleDeleteTransaction}
+                onEditTransaction={handleEditTransaction}
+              />
+            } />
+            <Route path="/bilanzen" element={<BilanzPage />} />
+            <Route path="/analytics" element={<DarkAnalyticsPage />} />
+            <Route path="/vermoegen" element={<VermoegenOverview />} />
+            <Route path="/tanken" element={<TankenPage />} />
+            <Route path="/business" element={
+              <BusinessOverviewPage
+                onDeleteTransaction={handleDeleteTransaction}
+                onEditTransaction={handleEditTransaction}
+                onAddTransaction={handleAddTransaction}
+              />
+            } />
+            <Route path="/hm" element={<HMPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </Suspense>
         
         {/* Global Modals */}
         <ConfirmModal

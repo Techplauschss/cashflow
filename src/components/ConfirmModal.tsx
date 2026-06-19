@@ -24,7 +24,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -32,11 +32,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-slate-800/95 backdrop-blur-lg border border-slate-600/50 rounded-2xl shadow-2xl max-w-md w-full mx-4 transform transition-all duration-200 scale-100 opacity-100">
-        <div className="p-6">
+      <div className="relative w-full rounded-t-3xl border border-slate-600/50 bg-slate-800/95 shadow-2xl backdrop-blur-lg transition-all duration-200 sm:max-w-md sm:rounded-2xl">
+        <div className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
           {/* Header */}
-          <div className="flex items-center mb-4">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${
+          <div className="mb-4 flex items-center">
+            <div className={`mr-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full sm:mr-4 sm:h-12 sm:w-12 ${
               isDestructive 
                 ? 'bg-red-500/20 text-red-400' 
                 : 'bg-blue-500/20 text-blue-400'
@@ -62,16 +62,16 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </p>
           
           {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-3 sm:justify-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
               onClick={onCancel}
-              className="px-4 py-2.5 text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/30 hover:border-slate-500/50 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-slate-500/50 order-2 sm:order-1"
+              className="order-2 rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-slate-300 transition-all hover:border-slate-500/50 hover:bg-slate-600/50 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-500/50 sm:order-1"
             >
               {cancelText}
             </button>
             <button
               onClick={onConfirm}
-              className={`px-4 py-2.5 font-medium rounded-lg transition-all focus:outline-none focus:ring-2 order-1 sm:order-2 ${
+              className={`order-1 rounded-xl px-4 py-3 font-medium transition-all focus:outline-none focus:ring-2 sm:order-2 ${
                 isDestructive
                   ? 'text-white bg-red-600 hover:bg-red-500 border border-red-500/50 hover:border-red-400/50 focus:ring-red-500/50'
                   : 'text-white bg-blue-600 hover:bg-blue-500 border border-blue-500/50 hover:border-blue-400/50 focus:ring-blue-500/50'

@@ -96,7 +96,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     };
 
     return (
-      <div className="relative flex items-center ml-2 group/km">
+      <div className="relative flex items-center group/km">
         <div className="relative flex items-center">
           <input 
             type="text"
@@ -105,7 +105,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             onChange={handleChange}
             onBlur={handleKmUpdate}
             onKeyDown={handleKeyDown}
-            className={`w-20 sm:w-24 pl-2.5 pr-6 py-1 bg-slate-900/40 border border-slate-700 hover:border-slate-500 hover:bg-slate-800/60 rounded-md text-xs font-medium text-slate-300 placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-slate-900 transition-all ${isSaving ? 'opacity-50' : ''}`}
+            className={`w-24 rounded-lg border border-slate-700 bg-slate-900/50 py-2 pl-2.5 pr-6 text-xs font-medium text-slate-300 placeholder-slate-600 transition-all hover:border-slate-500 hover:bg-slate-800/60 focus:border-blue-500 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 ${isSaving ? 'opacity-50' : ''}`}
             disabled={isSaving}
           />
           <div className="absolute right-2 text-[10px] font-bold text-slate-500 pointer-events-none transition-colors group-focus-within/km:text-blue-400">
@@ -165,7 +165,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     };
 
     return (
-      <div className="relative flex items-center ml-2 group/liter">
+      <div className="relative flex items-center group/liter">
         <div className="relative flex items-center">
           <input 
             type="text"
@@ -174,7 +174,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             onChange={handleChange}
             onBlur={handleLiterUpdate}
             onKeyDown={handleKeyDown}
-            className={`w-16 sm:w-20 pl-2.5 pr-6 py-1 bg-slate-900/40 border border-slate-700 hover:border-slate-500 hover:bg-slate-800/60 rounded-md text-xs font-medium text-slate-300 placeholder-slate-600 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:bg-slate-900 transition-all ${isSaving ? 'opacity-50' : ''}`}
+            className={`w-20 rounded-lg border border-slate-700 bg-slate-900/50 py-2 pl-2.5 pr-6 text-xs font-medium text-slate-300 placeholder-slate-600 transition-all hover:border-slate-500 hover:bg-slate-800/60 focus:border-green-500 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-green-500 ${isSaving ? 'opacity-50' : ''}`}
             disabled={isSaving}
           />
           <div className="absolute right-2 text-[10px] font-bold text-slate-500 pointer-events-none transition-colors group-focus-within/liter:text-green-400">
@@ -291,20 +291,16 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Lade verfügbare Monate
   const loadAvailableMonths = async () => {
     try {
-      console.log('🔄 [loadAvailableMonths] Starting to load available months...');
       const availableMonths = await getAvailableMonths();
-      console.log('📅 [loadAvailableMonths] Available months:', availableMonths);
       
       const currentDate = new Date();
       const currentMonthYear = currentDate.toLocaleDateString('de-DE', {
         month: 'long',
         year: 'numeric',
       });
-      console.log('📆 [loadAvailableMonths] Current month (formatted):', currentMonthYear);
 
       // Finde den aktuellen Monat in den verfügbaren Monaten
       const currentMonthData = availableMonths.find(m => m.monthYear === currentMonthYear);
-      console.log('🎯 [loadAvailableMonths] Current month data found:', currentMonthData);
       
       const monthsWithState = availableMonths.map(month => ({
         ...month,
@@ -315,25 +311,19 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
       // Alle Monate speichern
       setAllMonths(monthsWithState);
-      console.log('💾 [loadAvailableMonths] Saved all months with state:', monthsWithState);
       
       // Verfügbare Jahre extrahieren
       const years = [...new Set(monthsWithState.map(m => m.year))].sort((a, b) => b - a);
       setAvailableYears(years);
-      console.log('📊 [loadAvailableMonths] Available years:', years);
       
       // Monate für das aktuelle Jahr filtern
       filterMonthsByYear(monthsWithState, selectedYear);
-      console.log(`📋 [loadAvailableMonths] Filtered months for year ${selectedYear}`);
       
       setIsInitialLoading(false);
       
       // Lade Transaktionen für den aktuellen Monat automatisch (falls im ausgewählten Jahr)
       if (currentMonthData && currentMonthData.year === selectedYear) {
-        console.log(`⏳ [loadAvailableMonths] Loading transactions for current month: ${currentMonthData.year}-${currentMonthData.month}`);
         await loadTransactionsForMonth(currentMonthData.year, currentMonthData.month);
-      } else {
-        console.log('⚠️ [loadAvailableMonths] Current month not found or not in selected year');
       }
     } catch (error) {
       console.error('❌ [loadAvailableMonths] Error loading months:', error);
@@ -379,8 +369,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // Lade Transaktionen für einen Monat
   const loadTransactionsForMonth = async (year: number, month: number) => {
-    console.log(`📥 [loadTransactionsForMonth] Starting to load transactions for ${year}-${month}`);
-    
     setMonths(prev => prev.map(m =>
       m.year === year && m.month === month
         ? { ...m, isLoading: true }
@@ -389,14 +377,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
     try {
       const transactions = await getTransactionsForMonth(year, month);
-      console.log(`📥 [loadTransactionsForMonth] Successfully loaded ${transactions.length} transactions for ${year}-${month}:`, transactions);
       
       setMonths(prev => prev.map(m =>
         m.year === year && m.month === month
           ? { ...m, transactions, isLoading: false }
           : m
       ));
-      console.log(`✅ [loadTransactionsForMonth] Updated month data in state`);
     } catch (error) {
       console.error(`❌ [loadTransactionsForMonth] Error loading transactions for ${year}-${month}:`, error);
       setMonths(prev => prev.map(m =>
@@ -550,8 +536,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // Ref-Handler mit "Soft Refresh", um Scrollposition und geöffnete Monate zu behalten
   const refreshData = useCallback(async () => {
-    console.log('🔄 [refreshData] SOFT REFRESH TRIGGERED');
-    
     try {
       // Lade die Metadaten (Anzahlen etc.) im Hintergrund neu
       const availableMonths = await getAvailableMonths();
@@ -584,8 +568,6 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
         const investments = await getOneTimeInvestmentsForYear(selectedYearRef.current);
         setOneTimeInvestments(investments);
       }
-      
-      console.log('✅ [refreshData] Soft refresh complete');
     } catch (error) {
       console.error('❌ [refreshData] Error during soft refresh:', error);
     }
@@ -622,12 +604,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     const isTanken = isTankenTransaction(transaction.description, transaction.type);
     
     return (
-      <div
+      <article
         key={transaction.id}
-        className={`group border rounded-lg p-2 sm:p-3 transition-all relative ${
+        className={`group relative rounded-2xl border p-3 shadow-lg shadow-black/10 transition-all sm:p-3 ${
           isTanken
-            ? 'bg-blue-900/10 border-blue-800/50 hover:bg-blue-900/60'
-            : 'bg-slate-800/30 border-slate-600/30 hover:bg-slate-800/50'
+            ? 'border-blue-800/50 bg-blue-900/20 hover:bg-blue-900/60'
+            : 'border-slate-600/30 bg-slate-800/40 hover:bg-slate-800/50'
         } ${
           deletingTransactions.has(transaction.id) ? 'opacity-60' : ''
         }`}
@@ -644,11 +626,13 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </div>
         )}
         
-        <div className="flex items-start sm:items-center">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 sm:flex sm:items-center">
           <div className="flex-1 min-w-0">
             <div>
-              <h3 className="text-white font-medium text-sm md:text-base break-words flex items-center gap-1">
-                {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+              <h3 className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm font-medium leading-snug text-white md:text-base">
+                <span className="min-w-0 break-words">
+                  {highlightSearchTerm(truncateText(`${transaction.description} • ${transaction.location}`), searchTerm === activeSearchTerm ? activeSearchTerm : '')}
+                </span>
                 {/* Business-Indikator */}
                 {transaction.isBusiness && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
@@ -664,8 +648,10 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                 {/* Kilometerstand- und Liter-Eingabefelder für Tanken-Transaktionen */}
                 {isTanken && (
                   <>
-                    <KilometerstandInput transaction={transaction} />
-                    <LiterInput transaction={transaction} />
+                    <span className="mt-2 flex w-full flex-wrap gap-2 sm:mt-0 sm:w-auto">
+                      <KilometerstandInput transaction={transaction} />
+                      <LiterInput transaction={transaction} />
+                    </span>
                   </>
                 )}
               </h3>
@@ -697,8 +683,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             </div>
           </div>
           
-          <div className="text-right ml-1 sm:ml-2">
-            <div className={`text-sm sm:text-base md:text-lg font-semibold ${
+          <div className="min-w-[5.75rem] self-start text-right sm:ml-2 sm:self-auto">
+            <div className={`whitespace-nowrap text-sm font-semibold sm:text-base md:text-lg ${
               transaction.type === 'income' 
                 ? 'text-green-400' 
                 : 'text-red-400'
@@ -708,11 +694,11 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </div>
 
           {(onEditTransaction || onDeleteTransaction) && (
-            <div className="ml-3 opacity-60 group-hover:opacity-100 transition-opacity">
+            <div className="col-span-2 -mt-1 flex justify-end opacity-100 transition-opacity sm:col-span-1 sm:ml-3 sm:mt-0 sm:group-hover:opacity-100">
               <DropdownMenu
                 trigger={
                   <button
-                    className="p-2 text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 rounded-lg transition-all"
+                    className="rounded-xl p-2.5 text-slate-400 transition-all hover:bg-slate-700/50 hover:text-slate-300"
                     title="Aktionen"
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -738,15 +724,15 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             </div>
           )}
         </div>
-      </div>
+      </article>
     );
   };
 
   // Loading-Zustand
   if (isInitialLoading) {
     return (
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-lg sm:mt-8 sm:p-8">
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-white mb-4">Transaktionen</h2>
             <div className="flex items-center justify-center">
@@ -762,8 +748,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Leerer Zustand
   if (months.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-8 shadow-2xl mt-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-lg sm:mt-8 sm:p-8">
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-white mb-4">Transaktionen</h2>
             <p className="text-slate-400">Noch keine Transaktionen vorhanden.</p>
@@ -775,8 +761,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
   // Haupt-Render
   return (
-    <div className="max-w-4xl mx-auto px-4">
-      <div className="bg-white/5 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-3 sm:p-4 shadow-2xl mt-4 sm:mt-8">
+    <div className="mx-auto max-w-4xl">
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3.5 shadow-2xl backdrop-blur-lg sm:mt-8 sm:p-4">
       <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
           {/* Title and Year Selection - direkt nebeneinander */}
@@ -810,7 +796,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="block w-full pl-4 sm:py-3 rounded-2xl bg-slate-800/50 text-white placeholder-slate-400 focus:border-transparent text-sm"
+            className="block w-full rounded-2xl border border-slate-700/60 bg-slate-900/55 px-4 py-3 text-base text-white placeholder-slate-500 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
           />
         </div>
       </div>
@@ -821,12 +807,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
             {/* Monats-Header */}
             <button
               onClick={() => toggleMonth(monthData.year, monthData.month)}
-              className="w-full text-left mb-2 border-b border-slate-600/30 pb-1 hover:border-slate-500/50 transition-colors"
+              className="mb-2 w-full rounded-xl border border-transparent px-1 py-2 text-left transition-colors hover:border-slate-500/30 hover:bg-white/5"
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium text-slate-300">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-600/30 pb-2">
+                <h3 className="min-w-0 text-base font-semibold text-slate-200 sm:text-lg">
                   {getMonthName(monthData)}
-                  <span className="ml-2 text-sm text-slate-500">
+                  <span className="ml-2 text-xs text-slate-500 sm:text-sm">
                     ({(() => {
                       if (!monthData.transactions) {
                         return showOnlyBusiness ? '...' : monthData.count;
@@ -946,8 +932,8 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                         const savingsRate = calculateSavingsRate(balance.income, balance.expenses);
                         return (
                           <div className="mt-3 pt-3 border-t border-slate-600/30">
-                            <div className="bg-slate-700/30 rounded-lg p-2 sm:p-3">
-                              <div className="flex justify-between items-center mb-2">
+                            <div className="rounded-2xl bg-slate-700/30 p-3 sm:p-3">
+                              <div className="mb-3 flex flex-col gap-2 sm:mb-2 sm:flex-row sm:items-center sm:justify-between">
                                 <h4 className="text-white font-medium text-sm">Monatsbilanz</h4>
                                 <div className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                                   savingsRate >= 20 ? 'bg-green-500/20 text-green-300' :
@@ -958,7 +944,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
                                   Sparquote: {savingsRate >= 0 ? '+' : ''}{savingsRate.toFixed(1)}%
                                 </div>
                               </div>
-                              <div className="grid grid-cols-3 gap-3 text-sm">
+                              <div className="grid grid-cols-1 gap-2 text-sm min-[420px]:grid-cols-3 min-[420px]:gap-3">
                                 <div className="text-center">
                                   <div className="text-green-400 font-semibold">
                                     +{formatAmount(Math.abs(balance.income))}
@@ -1082,10 +1068,10 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
 
       {/* Bilanzen, Geplante Ausgaben, Business und H+M Buttons am Ende */}
       <div className="mt-6 pt-4 border-t border-slate-600/30">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-5">
           <Link 
             to="/bilanzen"
-            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+            className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-3 py-3 text-sm font-semibold text-white transition-all duration-200 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900 sm:px-6 sm:text-base"
           >
             <svg 
               className="w-5 h-5 mr-2" 
@@ -1105,7 +1091,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           
           <Link 
             to="/tanken"
-            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+            className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-green-600 to-teal-600 px-3 py-3 text-sm font-semibold text-white transition-all duration-200 hover:from-green-700 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-900 sm:px-6 sm:text-base"
           >
             <span className="text-lg mr-2">⛽</span>
             Tanken
@@ -1113,7 +1099,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           
           <Link 
             to="/vermoegen"
-            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+            className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-3 text-sm font-semibold text-white transition-all duration-200 hover:from-emerald-700 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900 sm:px-6 sm:text-base"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1123,7 +1109,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           
           <Link 
             to="/business"
-            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+            className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-3 text-sm font-semibold text-white transition-all duration-200 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 sm:px-6 sm:text-base"
           >
             <svg 
               className="w-5 h-5 mr-2" 
@@ -1143,7 +1129,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           
           <Link 
             to="/hm"
-            className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+            className="col-span-2 inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-orange-600 to-red-600 px-3 py-3 text-sm font-semibold text-white transition-all duration-200 hover:from-orange-700 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-900 sm:col-span-1 sm:px-6 sm:text-base"
           >
             <svg 
               className="w-5 h-5 mr-2" 

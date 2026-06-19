@@ -240,11 +240,8 @@ export const addTransaction = async (transactionData: TransactionFormData): Prom
   if (transactionData.liter !== undefined) transaction.liter = transactionData.liter;
   if (transactionData.vehicle !== undefined) transaction.vehicle = transactionData.vehicle;
 
-  console.log('🔵 [addTransaction] Adding new transaction:', transaction);
-
   try {
     const newTransactionRef = await push(transactionsRef, transaction);
-    console.log('✅ [addTransaction] Successfully added transaction with ID:', newTransactionRef.key);
 
     if (selectedExchange) {
       const delta = getTransactionBalanceImpact(transaction);
@@ -309,8 +306,6 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
   const startDate = new Date(Date.UTC(year, month - 1, 1)).toISOString().split('T')[0];
   const endDate = new Date(Date.UTC(year, month, 0)).toISOString().split('T')[0];
   
-  console.log(`🔍 [getTransactionsForMonth] Loading transactions for ${year}-${month} (${startDate} to ${endDate})`);
-  
   const monthQuery = query(
     transactionsRef,
     orderByChild('date'),
@@ -321,12 +316,9 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
   return new Promise((resolve, reject) => {
     onValue(monthQuery, (snapshot) => {
       const data = snapshot.val();
-      console.log(`📊 [getTransactionsForMonth] Raw data from Firebase:`, data);
       
       if (data) {
         const allTransactions = mapTransactions(data as Record<string, TransactionRecord>);
-        
-        console.log(`📋 [getTransactionsForMonth] All transactions before filtering (${allTransactions.length}):`, allTransactions);
         
         const transactions: Transaction[] = allTransactions
           .filter(transaction => !transaction.isPlanned) // Filtere geplante Transaktionen aus
@@ -334,11 +326,8 @@ export const getTransactionsForMonth = async (year: number, month: number, inclu
           .filter(transaction => 
             includeHM || !isHMTransaction(transaction.description)
           ); // Filtere H+M Transaktionen aus (außer explizit gewünscht)
-        
-        console.log(`✅ [getTransactionsForMonth] Transactions after filtering (${transactions.length}):`, transactions);
         resolve(transactions);
       } else {
-        console.log(`⚠️ [getTransactionsForMonth] No data found for this month`);
         resolve([]);
       }
     }, (error) => {
@@ -747,8 +736,6 @@ export const getOneTimeInvestmentsForYear = async (year: number): Promise<Transa
   // Erstelle Start- und Enddatum für das Jahr
   const startDate = `${year}-01-01`;
   const endDate = `${year}-12-31`;
-  
-  console.log(`🔍 [getOneTimeInvestmentsForYear] Loading one-time investments for ${year} (${startDate} to ${endDate})`);
   
   const yearQuery = query(
     transactionsRef,

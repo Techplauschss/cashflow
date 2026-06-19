@@ -132,7 +132,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   })();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -140,23 +140,23 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-slate-800/95 backdrop-blur-lg border border-slate-600/50 rounded-2xl shadow-2xl max-w-md w-full mx-4 transform transition-all duration-200 scale-100 opacity-100">
-        <div className="p-6">
+      <div className="relative max-h-[92dvh] w-full overflow-hidden rounded-t-3xl border border-slate-600/50 bg-slate-800/95 shadow-2xl backdrop-blur-lg transition-all duration-200 sm:max-w-md sm:rounded-2xl">
+        <div className="max-h-[92dvh] overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
           {/* Header */}
-          <div className="flex items-center mb-6">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center mr-4 bg-blue-500/20 text-blue-400">
+          <div className="mb-5 flex items-center">
+            <div className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400 sm:mr-4 sm:h-12 sm:w-12">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">Neue Transaktion</h3>
-              <p className="text-sm text-slate-400">Fügen Sie eine neue Transaktion hinzu</p>
+              <p className="text-sm text-slate-400">Fügen Sie eine Transaktion hinzu</p>
             </div>
           </div>
           
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
             {/* Type Toggle */}
             <div className="flex bg-slate-700/30 rounded-lg p-1">
               <button
@@ -194,7 +194,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 value={amount}
                 onChange={handleAmountChange}
                 onKeyDown={handleAmountKeyDown}
-                className="w-full pl-8 pr-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                inputMode="decimal"
+                className="w-full rounded-xl border border-slate-600/30 bg-slate-700/50 py-3 pl-8 pr-4 text-base text-white placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="0,00"
                 required
               />
@@ -209,7 +210,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-base text-white placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="z.B. Lebensmittel, Gehalt..."
                 required
               />
@@ -224,14 +225,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-base text-white placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="z.B. Supermarkt, Online..."
               />
             </div>
 
             {/* Tanken-spezifische Felder */}
             {isTanken && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Kilometerstand
@@ -240,7 +241,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                     type="text"
                     value={kilometerstand}
                     onChange={(e) => setKilometerstand(e.target.value.replace(/[^\d]/g, ''))}
-                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    inputMode="numeric"
+                    className="w-full rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-base text-white placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="km"
                   />
                 </div>
@@ -252,7 +254,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                     type="text"
                     value={liter}
                     onChange={(e) => setLiter(e.target.value.replace(/[^\d,]/g, ''))}
-                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    inputMode="decimal"
+                    className="w-full rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-base text-white placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-green-500"
                     placeholder="L"
                   />
                 </div>
@@ -309,23 +312,23 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-base text-white placeholder-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
             </div>
 
             {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+            <div className="flex flex-col gap-3 pt-3 sm:flex-row sm:pt-4">
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2.5 text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/30 hover:border-slate-500/50 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-slate-500/50 order-2 sm:order-1"
+                className="order-2 rounded-xl border border-slate-600/30 bg-slate-700/50 px-4 py-3 text-slate-300 transition-all hover:border-slate-500/50 hover:bg-slate-600/50 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-500/50 sm:order-1"
               >
                 Abbrechen
               </button>
               <button
                 type="submit"
-                className="px-4 py-2.5 font-medium text-white bg-blue-600 hover:bg-blue-500 border border-blue-500/50 hover:border-blue-400/50 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 order-1 sm:order-2"
+                className="order-1 rounded-xl border border-blue-500/50 bg-blue-600 px-4 py-3 font-medium text-white transition-all hover:border-blue-400/50 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 sm:order-2"
               >
                 Hinzufügen
               </button>

@@ -136,8 +136,6 @@ export const HMPage = () => {
         location: data.location,
         affectsBalance: false,
       });
-
-      console.log('H+M Transaktion erfolgreich gespeichert');
     } catch (error) {
       console.error('Error saving H+M transaction:', error);
       throw error;
@@ -180,7 +178,6 @@ export const HMPage = () => {
 
       setShowEditModal(false);
       setTransactionToEdit(null);
-      console.log('H+M Transaktion erfolgreich bearbeitet');
     } catch (error) {
       console.error('Error updating H+M transaction:', error);
       throw error;
@@ -201,7 +198,6 @@ export const HMPage = () => {
     if (transactionToDelete) {
       try {
         await deleteTransaction(transactionToDelete);
-        console.log('H+M Transaktion erfolgreich gelöscht');
       } catch (error) {
         console.error('Error deleting H+M transaction:', error);
       }
@@ -262,8 +258,6 @@ export const HMPage = () => {
         }
         throw error;
       }
-      
-      console.log('Transaktion erfolgreich zur Main-Liste hinzugefügt');
     } catch (error) {
       console.error('Error adding transaction to main:', error);
     }
