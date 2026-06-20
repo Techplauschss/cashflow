@@ -3,8 +3,7 @@ const BASE_URL = 'https://eodhd.com/api';
 const FRANKFURTER_BASE_URL = 'https://api.frankfurter.dev/v1';
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 
-// Öffentlicher CORS-Proxy, um die Browser-Sicherheitsrichtlinie für externe APIs zu umgehen.
-// Dies ist die einfachste Lösung für reine Frontend-Projekte ohne Backend.
+const ALL_ORIGINS_PROXY = 'https://api.allorigins.win/get?url=';
 const CORS_PROXY = 'https://corsproxy.io/?';
 
 export const hasLivePriceApiKey = Boolean(API_KEY);
@@ -44,6 +43,10 @@ interface CoinGeckoBitcoinResult {
   };
 }
 
+interface AllOriginsResult {
+  contents?: string;
+}
+
 export interface TickerMapping {
   ticker: string;
   currency?: string;
@@ -69,18 +72,36 @@ const fetchJson = async <T>(targetUrl: string): Promise<T> => {
     return await res.json() as T;
   }
 
-  const proxiedUrl = `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
-  const urls = [targetUrl, proxiedUrl];
+  const proxiedUrls = [
+    {
+      url: targetUrl,
+      parse: async (res: Response) => await res.json() as T,
+    },
+    {
+      url: `${ALL_ORIGINS_PROXY}${encodeURIComponent(targetUrl)}`,
+      parse: async (res: Response) => {
+        const data = await res.json() as AllOriginsResult;
+        if (!data.contents) {
+          throw new Error('AllOrigins response did not include contents');
+        }
+        return JSON.parse(data.contents) as T;
+      },
+    },
+    {
+      url: `${CORS_PROXY}${encodeURIComponent(targetUrl)}`,
+      parse: async (res: Response) => await res.json() as T,
+    },
+  ];
 
   let lastError: unknown = null;
-  for (const url of urls) {
+  for (const { url, parse } of proxiedUrls) {
     try {
       const res = await fetch(url);
       if (!res.ok) {
         lastError = new Error(`${res.status} ${res.statusText}`);
         continue;
       }
-      return await res.json() as T;
+      return await parse(res);
     } catch (error) {
       lastError = error;
     }
