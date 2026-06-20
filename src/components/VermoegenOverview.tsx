@@ -1,25 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { addExchange, updateExchange, deleteExchange, subscribeToExchanges, type Exchange, type PortfolioProduct } from '../services/transactionService';
 import { useLivePrices } from '../services/useLivePrices';
 
 export const VermoegenOverview: React.FC = () => {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [balance, setBalance] = useState('');
   const [shortcut, setShortcut] = useState('');
   const [parentId, setParentId] = useState<string | null>(null);
   const [products, setProducts] = useState<PortfolioProduct[]>([]);
+  const [newProductType, setNewProductType] = useState<NonNullable<PortfolioProduct['type']>>('isin');
   const [newProductIsin, setNewProductIsin] = useState('');
   const [newProductShares, setNewProductShares] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showTotalWealth, setShowTotalWealth] = useState(true);
-  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
-  const [targetExchange, setTargetExchange] = useState<Exchange | null>(null);
-  const [modalIsin, setModalIsin] = useState('');
-  const [modalShares, setModalShares] = useState('');
+  const [depotExchange, setDepotExchange] = useState<Exchange | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToExchanges((data) => {
@@ -33,18 +32,37 @@ export const VermoegenOverview: React.FC = () => {
     return exchanges.flatMap(ex => ex.products || []);
   }, [exchanges]);
 
-  const { prices, loading: pricesLoading, error: pricesError, failedIsins, refetchPrices } = useLivePrices(allProducts);
+  const { quotes, loading: pricesLoading, error: pricesError, failedIsins, refetchPrices } = useLivePrices(allProducts);
+
+  const getProductType = (product: PortfolioProduct): NonNullable<PortfolioProduct['type']> => (
+    product.type ?? (product.isin.trim().toUpperCase() === 'BTC' ? 'btc' : 'isin')
+  );
+
+  const getProductQuoteKey = (product: PortfolioProduct) => (
+    getProductType(product) === 'btc' ? 'BTC' : product.isin.toUpperCase()
+  );
+
+  const getProductLabel = (product: PortfolioProduct) => (
+    getProductType(product) === 'btc' ? 'Bitcoin (BTC)' : product.isin.toUpperCase()
+  );
 
   const getProductValue = (product: PortfolioProduct) => {
-    const price = prices[product.isin.toUpperCase()];
-    return price ? price * product.shares : 0;
+    const quote = quotes[getProductQuoteKey(product)];
+    return quote ? quote.priceEur * product.shares : 0;
   };
 
   const getExchangeProductValue = (ex: Exchange) => {
     return (ex.products || []).reduce((sum, p) => sum + getProductValue(p), 0);
   };
 
-  const totalWealth = exchanges.reduce((sum, ex) => sum + (ex.balance || 0) + getExchangeProductValue(ex), 0);
+  function getExchangeTotalValue(ex: Exchange): number {
+    const children = exchanges.filter((child) => child.parentId === ex.id);
+    return ex.balance + getExchangeProductValue(ex) + children.reduce((sum, child) => sum + getExchangeTotalValue(child), 0);
+  }
+
+  const totalWealth = exchanges
+    .filter((ex) => !ex.parentId)
+    .reduce((sum, ex) => sum + getExchangeTotalValue(ex), 0);
 
   const formatAmount = (amount: number): string => {
     return new Intl.NumberFormat('de-DE', {
@@ -86,20 +104,37 @@ export const VermoegenOverview: React.FC = () => {
     return lower.includes('portfolio') || lower.includes('depot');
   };
 
-  const isPortfolioAccount = hasPortfolioFeatures(name);
+  const shouldShowPortfolioPanel = (exchange: Exchange) => (
+    hasPortfolioFeatures(exchange.name) || (exchange.products?.length ?? 0) > 0
+  );
 
   const getChildren = (id: string) => exchanges.filter((ex) => ex.parentId === id);
   const hasChildren = (id: string | null) => !!id && exchanges.some((ex) => ex.parentId === id);
   const editingHasChildren = editingId ? hasChildren(editingId) : false;
+  const editingDescendantIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    const collectDescendants = (exchangeId: string) => {
+      exchanges.filter((ex) => ex.parentId === exchangeId).forEach((child) => {
+        ids.add(child.id);
+        collectDescendants(child.id);
+      });
+    };
+
+    if (editingId) {
+      collectDescendants(editingId);
+    }
+
+    return ids;
+  }, [editingId, exchanges]);
+  const parentOptions = exchanges
+    .filter((ex) => ex.id !== editingId && !editingDescendantIds.has(ex.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
   const topLevelExchanges = exchanges
     .filter((ex) => !ex.parentId)
     .map((mainExchange) => {
       const children = getChildren(mainExchange.id);
-      const childrenProductValue = children.reduce((s, c) => s + getExchangeProductValue(c), 0);
-      const mainProductValue = getExchangeProductValue(mainExchange);
-      const combinedBalance = mainExchange.balance + mainProductValue + children.reduce((s, c) => s + (c.balance || 0), 0) + childrenProductValue;
-      return { ...mainExchange, children, combinedBalance };
+      return { ...mainExchange, children, combinedBalance: getExchangeTotalValue(mainExchange) };
     })
     .sort((a, b) => b.combinedBalance - a.combinedBalance);
 
@@ -119,18 +154,15 @@ export const VermoegenOverview: React.FC = () => {
 
     if (!name.trim()) return;
 
-    const productPayload = isPortfolioAccount ? products : undefined;
-
     if (editingId) {
       await updateExchange(editingId, {
         name: name.trim(),
         balance: numericBalance,
         parentId,
         shortcut: shortcut.trim() === '' ? null : shortcut.trim(), // Set to null if empty to explicitly delete the field in Firebase
-        ...(productPayload ? { products: productPayload } : {})
       });
     } else {
-      await addExchange(name.trim(), numericBalance, parentId, shortcut.trim() || undefined, productPayload);
+      await addExchange(name.trim(), numericBalance, parentId, shortcut.trim() || undefined);
     }
     resetForm();
   };
@@ -141,14 +173,7 @@ export const VermoegenOverview: React.FC = () => {
     setBalance(exchange.balance.toString().replace('.', ','));
     setShortcut(exchange.shortcut || '');
     setParentId(exchange.parentId || null);
-    setProducts(exchange.products?.map((product) => ({
-      id: product.id,
-      isin: product.isin,
-      shares: Number(product.shares) || 0,
-    })) || []);
-    setNewProductIsin('');
-    setNewProductShares('');
-    setIsAdding(true);
+    setIsAccountModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -163,84 +188,108 @@ export const VermoegenOverview: React.FC = () => {
   };
 
   const resetForm = () => {
-    setIsAdding(false);
+    setIsAccountModalOpen(false);
     setEditingId(null);
     setName('');
     setBalance('');
     setShortcut('');
     setParentId(null);
-    setProducts([]);
+  };
+
+  const openCreateAccountModal = () => {
+    setEditingId(null);
+    setName('');
+    setBalance('');
+    setShortcut('');
+    setParentId(null);
+    setIsAccountModalOpen(true);
+  };
+
+  const openCreateSubaccountModal = () => {
+    if (!editingId) return;
+
+    const currentAccountId = editingId;
+    setEditingId(null);
+    setName('');
+    setBalance('');
+    setShortcut('');
+    setParentId(currentAccountId);
+  };
+
+  const handleOpenDepotModal = (exchange: Exchange, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setDepotExchange(exchange);
+    setProducts(exchange.products?.map((product) => ({
+      id: product.id,
+      isin: product.isin.toUpperCase(),
+      shares: Number(product.shares) || 0,
+      type: getProductType(product),
+    })) || []);
+    setNewProductType('isin');
     setNewProductIsin('');
     setNewProductShares('');
   };
 
-  const handleOpenAddProduct = (e: React.MouseEvent, exchange: Exchange) => {
-    e.stopPropagation();
-    setTargetExchange(exchange);
-    setModalIsin('');
-    setModalShares('');
-    setIsAddProductModalOpen(true);
+  const closeDepotModal = () => {
+    setDepotExchange(null);
+    setProducts([]);
+    setNewProductType('isin');
+    setNewProductIsin('');
+    setNewProductShares('');
   };
 
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetExchange) return;
-
-    const isin = modalIsin.trim().toUpperCase();
-    const shares = parseFloat(modalShares.replace(',', '.'));
+  const handleAddProductDraft = () => {
+    const type = newProductType;
+    const isin = type === 'btc' ? 'BTC' : newProductIsin.trim().toUpperCase();
+    const shares = parseFloat(newProductShares.replace(',', '.'));
     
-    if (!isin || Number.isNaN(shares) || shares <= 0) {
-      alert('Bitte gültige ISIN und Stückzahl eingeben.');
+    if ((type === 'isin' && !isin) || Number.isNaN(shares) || shares <= 0) {
+      alert(type === 'btc' ? 'Bitte gültige BTC-Anteile eingeben.' : 'Bitte gültige ISIN und Stückzahl eingeben.');
       return;
     }
 
-    const currentProducts = targetExchange.products || [];
-    const newProduct: PortfolioProduct = {
-      id: `${Date.now()}-${isin}`,
-      isin,
-      shares
-    };
+    setProducts((current) => [
+      ...current,
+      { id: `${Date.now()}-${isin}`, isin, shares, type },
+    ]);
+    setNewProductType('isin');
+    setNewProductIsin('');
+    setNewProductShares('');
+  };
+
+  const handleSaveDepot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depotExchange) return;
 
     try {
-      await updateExchange(targetExchange.id, {
-        products: [...currentProducts, newProduct]
+      await updateExchange(depotExchange.id, {
+        products,
       });
-      setIsAddProductModalOpen(false);
-      setTargetExchange(null);
+      closeDepotModal();
     } catch (error) {
-      console.error('Fehler beim Hinzufügen des Produkts:', error);
-      alert('Fehler beim Speichern des Produkts.');
+      console.error('Fehler beim Speichern des Depots:', error);
+      alert('Fehler beim Speichern des Depots.');
     }
   };
 
-  const handleDeleteProduct = async (exchangeId: string, productId: string) => {
-    if (window.confirm('Produkt wirklich löschen?')) {
-      const exchange = exchanges.find((ex) => ex.id === exchangeId);
-      if (exchange) {
-        const updatedProducts = (exchange.products || []).filter((p) => p.id !== productId);
-        try {
-          await updateExchange(exchangeId, { products: updatedProducts });
-        } catch (error) {
-          console.error('Fehler beim Löschen des Produkts:', error);
-          alert('Fehler beim Löschen des Produkts.');
-        }
-      }
-    }
+  const removeProductDraft = (productId: string) => {
+    setProducts((current) => current.filter((product) => product.id !== productId));
   };
 
    // Funktion zum Rendern der Portfolio-Produkte (inkl. Ladezustände & Live-Kurse)
   const renderProducts = (exchange: Exchange) => (
     <div className="space-y-2">
       {(exchange.products || []).map((product) => {
-        const normalizedIsin = product.isin.toUpperCase();
-        const livePrice = prices[normalizedIsin];
-        const isFailed = failedIsins.has(normalizedIsin);
-        const totalValue = livePrice ? livePrice * product.shares : 0;
+        const productLabel = getProductLabel(product);
+        const quoteKey = getProductQuoteKey(product);
+        const liveQuote = quotes[quoteKey];
+        const isFailed = failedIsins.has(quoteKey);
+        const totalValue = liveQuote ? liveQuote.priceEur * product.shares : 0;
         
         return (
           <div key={product.id} className="group flex items-center justify-between gap-3 rounded-lg bg-slate-800/50 hover:bg-slate-800/70 transition-colors px-3 py-2 text-slate-200 text-sm">
             <div className="flex flex-col">
-              <span className="font-medium">{normalizedIsin}</span>
+              <span className="font-medium">{productLabel}</span>
               <span className="text-slate-400">Anteile: {product.shares}</span>
             </div>
             <div className="flex items-center gap-3">
@@ -252,19 +301,19 @@ export const VermoegenOverview: React.FC = () => {
                   </div>
                 ) : isFailed ? (
                   <span className="text-amber-400 text-xs">Kurs nicht verfügbar</span>
-                ) : livePrice ? (
+                ) : liveQuote ? (
                   <>
                     <span className="font-semibold text-green-400">{formatAmount(totalValue)}</span>
-                    <span className="text-xs text-slate-400">{formatAmount(livePrice)} / Stück</span>
+                    <span className="text-xs text-slate-400">{formatAmount(liveQuote.priceEur)} / Stück</span>
+                    {liveQuote.currency !== 'EUR' && (
+                      <span className="text-[11px] text-slate-500">
+                        {liveQuote.currency} {liveQuote.price.toFixed(2)} → EUR
+                      </span>
+                    )}
                   </>
                 ) : (
                   <span className="text-slate-500 text-xs">Warte auf Kurs...</span>
                 )}
-              </div>
-              <div className="flex opacity-0 group-hover:opacity-100 transition-opacity pl-2 border-l border-slate-700/50">
-                <button onClick={() => handleDeleteProduct(exchange.id, product.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded-md transition-all" title="Produkt löschen">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
               </div>
             </div>
           </div>
@@ -272,6 +321,91 @@ export const VermoegenOverview: React.FC = () => {
       })}
     </div>
   );
+
+  const renderAccountChildren = (parentAccount: Exchange, level = 1): React.ReactNode => {
+    const children = getChildren(parentAccount.id)
+      .sort((a, b) => getExchangeTotalValue(b) - getExchangeTotalValue(a));
+
+    if (children.length === 0) return null;
+
+    return (
+      <div className={`${level === 1 ? 'pl-3 sm:pl-4 ml-3 sm:ml-4' : 'pl-4 ml-4'} space-y-2 border-l-2 border-slate-700/50`}>
+        {children.map((child) => {
+          const childTotal = getExchangeTotalValue(child);
+
+          return (
+            <React.Fragment key={child.id}>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-slate-800/20 border border-slate-700/50 rounded-lg hover:bg-slate-800/40 transition-colors group">
+                <span className="text-slate-300 font-medium text-sm flex items-center gap-2">
+                  <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  {child.name}
+                  {hasPortfolioFeatures(child.name) && (
+                    <button
+                      onClick={(e) => handleOpenDepotModal(child, e)}
+                      className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                      title="Depot bearbeiten"
+                    >
+                      Depot
+                    </button>
+                  )}
+                </span>
+                <div className="flex items-center space-x-4">
+                  <span className="text-slate-300 font-semibold text-sm">
+                    {pricesLoading ? (
+                      <span className="animate-pulse bg-slate-700/50 rounded h-5 w-20 inline-block align-middle"></span>
+                    ) : (
+                      formatAmount(childTotal)
+                    )}
+                  </span>
+                  <div className="flex items-center space-x-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => handleEdit(child)} className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                    <button onClick={() => handleDelete(child.id)} className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-md transition-all" title="Löschen">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {shouldShowPortfolioPanel(child) && (
+                <div className="pl-6 sm:pl-8 pb-2">
+                  <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{child.products?.length ?? 0} Einträge</span>
+                        {hasPortfolioFeatures(child.name) && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenDepotModal(child, e)}
+                            className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                          >
+                            + Produkt
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {child.products && child.products.length > 0 ? (
+                      renderProducts(child)
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenDepotModal(child, e)}
+                        className="w-full rounded-xl border border-dashed border-emerald-500/25 bg-emerald-500/5 px-3 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+                      >
+                        Erstes Finanzprodukt hinzufügen
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {renderAccountChildren(child, level + 1)}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
   if (isLoading) return null;
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#6366f1', '#ec4899', '#14b8a6', '#f43f5e', '#06b6d4', '#f97316'];
@@ -347,11 +481,11 @@ export const VermoegenOverview: React.FC = () => {
                     {mainExchange.name}
                     {hasPortfolioFeatures(mainExchange.name) && (
                       <button
-                        onClick={(e) => handleOpenAddProduct(e, mainExchange)}
-                        className="text-slate-400 hover:text-green-400 transition-colors bg-slate-700/50 hover:bg-slate-600 rounded-full w-5 h-5 flex items-center justify-center text-sm pb-0.5"
-                        title="ISIN hinzufügen"
+                        onClick={(e) => handleOpenDepotModal(mainExchange, e)}
+                        className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                        title="Depot bearbeiten"
                       >
-                        +
+                        Depot
                       </button>
                     )}
                   </span>
@@ -363,7 +497,7 @@ export const VermoegenOverview: React.FC = () => {
                         formatAmount(mainExchange.combinedBalance)
                       )}
                     </span>
-                    <div className="flex space-x-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center space-x-2 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => handleEdit(mainExchange)} className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
@@ -375,221 +509,181 @@ export const VermoegenOverview: React.FC = () => {
                 </div>
 
               {/* Main Account Products */}
-              {hasPortfolioFeatures(mainExchange.name) && (
+              {shouldShowPortfolioPanel(mainExchange) && (
                 <div className="pl-6 sm:pl-8 pb-2 mt-2 border-l-2 border-transparent ml-3 sm:ml-4">
                   <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
-                      <span className="text-xs text-slate-500">{mainExchange.products?.length ?? 0} Einträge</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{mainExchange.products?.length ?? 0} Einträge</span>
+                        {hasPortfolioFeatures(mainExchange.name) && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenDepotModal(mainExchange, e)}
+                            className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                          >
+                            + Produkt
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {mainExchange.products && mainExchange.products.length > 0 ? (
                       renderProducts(mainExchange)
                     ) : (
-                      <p className="text-slate-500 text-sm">Keine Finanzprodukte hinterlegt. Bearbeiten, um ISIN und Anteile hinzuzufügen.</p>
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenDepotModal(mainExchange, e)}
+                        className="w-full rounded-xl border border-dashed border-emerald-500/25 bg-emerald-500/5 px-3 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+                      >
+                        Erstes Finanzprodukt hinzufügen
+                      </button>
                     )}
                   </div>
                 </div>
               )}
 
-                {/* Sub Accounts */}
-                {mainExchange.children.length > 0 && (
-                  <div className="pl-3 sm:pl-4 space-y-2 border-l-2 border-slate-700/50 ml-3 sm:ml-4">
-                    {mainExchange.children.map(child => {
-                      const childProductValue = getExchangeProductValue(child);
-                      const childTotal = child.balance + childProductValue;
-                      return (
-                      <React.Fragment key={child.id}>
-                        <div className="flex justify-between items-center p-2 sm:p-3 bg-slate-800/20 border border-slate-700/50 rounded-lg hover:bg-slate-800/40 transition-colors group">
-                          <span className="text-slate-300 font-medium text-sm flex items-center gap-2">
-                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                            {child.name}
-                            {hasPortfolioFeatures(child.name) && (
-                              <button
-                                onClick={(e) => handleOpenAddProduct(e, child)}
-                                className="text-slate-400 hover:text-green-400 transition-colors bg-slate-700/50 hover:bg-slate-600 rounded-full w-5 h-5 flex items-center justify-center text-sm pb-0.5"
-                                title="ISIN hinzufügen"
-                              >
-                                +
-                              </button>
-                            )}
-                          </span>
-                          <div className="flex items-center space-x-4">
-                            <span className="text-slate-300 font-semibold text-sm">
-                              {pricesLoading ? (
-                                <span className="animate-pulse bg-slate-700/50 rounded h-5 w-20 inline-block align-middle"></span>
-                              ) : (
-                                formatAmount(childTotal)
-                              )}
-                            </span>
-                            <div className="flex space-x-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleEdit(child)} className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/50 rounded-md transition-all" title="Bearbeiten">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                              </button>
-                              <button onClick={() => handleDelete(child.id)} className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-md transition-all" title="Löschen">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        {hasPortfolioFeatures(child.name) && (
-                          <div className="pl-6 sm:pl-8 pb-2">
-                            <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
-                                <span className="text-xs text-slate-500">{child.products?.length ?? 0} Einträge</span>
-                              </div>
-                              {child.products && child.products.length > 0 ? (
-                              renderProducts(child)
-                              ) : (
-                                <p className="text-slate-500 text-sm">Keine Finanzprodukte hinterlegt. Bearbeiten, um ISIN und Anteile hinzuzufügen.</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </React.Fragment>
-                    )})}
-                  </div>
-                )}
+                {renderAccountChildren(mainExchange)}
               </div>
             );
           })}
 
-          {exchanges.length === 0 && !isAdding && (
+          {exchanges.length === 0 && !isAccountModalOpen && (
             <div className="text-center py-6 text-slate-400 text-sm border border-dashed border-slate-600/30 rounded-lg">
               Noch keine Börsen oder Konten angelegt.
             </div>
           )}
         </div>
 
-        {isAdding ? (
-          <form onSubmit={handleSave} className="mt-4 p-4 sm:p-5 bg-slate-700/30 rounded-xl border border-slate-600/30 shadow-inner">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Name (Börse/Konto)</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="z.B. Trade Republic" required autoFocus />
-              </div>
-              {editingHasChildren ? (
-                <div className="sm:col-span-2 p-3 rounded-lg bg-slate-800/40 border border-slate-600/50">
-                  <p className="text-sm text-slate-300 font-medium mb-1.5">Guthaben (€) (Optional)</p>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Guthaben (€) (Optional)</label>
-                  <input
-                    type="text"
-                    value={balance}
-                    onChange={handleBalanceChange}
-                    className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0,00"
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Kürzel (Optional)</label>
-                <input
-                  type="text"
-                  value={shortcut}
-                  onChange={(e) => setShortcut(e.target.value.toUpperCase().slice(0, 3))}
-                  className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="z.B. TR"
-                  maxLength={3}
-                />
-                <p className="mt-1 text-xs text-slate-400">Max. 3 Zeichen, wird automatisch großgeschrieben</p>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Überkonto / Hauptkonto (Optional)</label>
-                <select
-                  value={parentId || ''}
-                  onChange={(e) => setParentId(e.target.value || null)}
-                  className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                >
-                  <option value="">-- Kein Überkonto (Ist ein Hauptkonto) --</option>
-                  {topLevelExchanges.filter(ex => ex.id !== editingId).map(ex => (
-                    <option key={ex.id} value={ex.id}>{ex.name}</option>
-                  ))}
-                </select>
-              </div>
+        <button onClick={openCreateAccountModal} className="mt-4 w-full py-3.5 border-2 border-dashed border-slate-600/50 rounded-xl text-slate-400 hover:text-white hover:border-slate-500 hover:bg-slate-700/20 transition-all font-medium flex items-center justify-center">
+          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Börse / Konto hinzufügen
+        </button>
 
-              {isPortfolioAccount && (
-                <div className="sm:col-span-2 bg-slate-800/40 p-4 rounded-xl border border-slate-600/40">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-300 mb-1.5">ISIN</label>
-                      <input
-                        type="text"
-                        value={newProductIsin}
-                        onChange={(e) => setNewProductIsin(e.target.value.toUpperCase())}
-                        className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="z.B. DE000A1YB8A1"
-                      />
-                    </div>
+        {isAccountModalOpen && createPortal((
+          <div className="fixed inset-0 z-50 flex min-h-dvh items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-slate-900/95 shadow-2xl shadow-black/40">
+              <form onSubmit={handleSave}>
+                <div className="border-b border-white/10 bg-gradient-to-br from-blue-500/15 via-purple-500/10 to-cyan-500/10 p-5 sm:p-6">
+                  <div className="flex items-start justify-between gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1.5">Anteile</label>
-                      <input
-                        type="text"
-                        value={newProductShares}
-                        onChange={(e) => setNewProductShares(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="0,00"
-                      />
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/80">
+                        {editingId ? 'Konto bearbeiten' : parentId ? 'Neues Unterkonto' : 'Neues Konto'}
+                      </p>
+                      <h3 className="text-2xl font-bold text-white">
+                        {editingId ? name || 'Börse / Konto' : parentId ? 'Unterkonto anlegen' : 'Börse / Konto anlegen'}
+                      </h3>
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        const isin = newProductIsin.trim();
-                        const shares = parseFloat(newProductShares.replace(',', '.'));
-                        if (!isin || !newProductShares || Number.isNaN(shares) || shares <= 0) {
-                          alert('Bitte gültige ISIN und Stückzahl eingeben.');
-                          return;
-                        }
-                        setProducts((current) => [
-                          ...current,
-                          { id: `${Date.now()}-${isin}`, isin, shares },
-                        ]);
-                        setNewProductIsin('');
-                        setNewProductShares('');
-                      }}
-                      className="w-full px-3 py-2.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-500 transition-colors"
+                      onClick={resetForm}
+                      className="rounded-full bg-white/10 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+                      aria-label="Modal schließen"
                     >
-                      Produkt hinzufügen
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
+                </div>
 
-                  <div className="mt-4 space-y-2">
-                    {products.length > 0 ? (
-                      products.map((product) => (
-                        <div key={product.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-900/70 p-3 border border-slate-700">
-                          <div>
-                            <p className="text-slate-100 text-sm font-medium">{product.isin}</p>
-                            <p className="text-slate-400 text-xs">Anteile: {product.shares}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setProducts((current) => current.filter((item) => item.id !== product.id))}
-                            className="text-red-400 hover:text-red-300 text-sm"
-                          >
-                            Entfernen
-                          </button>
+                <div className="max-h-[70dvh] space-y-4 overflow-y-auto p-5 sm:p-6">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Name</label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30"
+                      placeholder="z.B. Trade Republic Depot"
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  {editingId && (
+                    <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-cyan-100">Unterkonto für dieses Konto anlegen</p>
                         </div>
-                      ))
+                        <button
+                          type="button"
+                          onClick={openCreateSubaccountModal}
+                          className="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-400"
+                        >
+                          + Unterkonto
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {editingHasChildren ? (
+                      <div className="rounded-2xl border border-slate-700/70 bg-slate-950/50 p-4 sm:col-span-2">
+                        <p className="text-sm font-medium text-slate-200">Guthaben wird aus Unterkonten berechnet</p>
+                      </div>
                     ) : (
-                      <p className="text-slate-500 text-sm">Hier können Sie direkt ISINs und Anteilsmengen für Ihr Portfolio eintragen.</p>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-slate-300">Guthaben</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">€</span>
+                          <input
+                            type="text"
+                            value={balance}
+                            onChange={handleBalanceChange}
+                            className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 py-3 pl-9 pr-4 text-white placeholder-slate-500 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30"
+                            placeholder="0,00"
+                            inputMode="decimal"
+                          />
+                        </div>
+                      </div>
                     )}
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-slate-300">Kürzel</label>
+                      <input
+                        type="text"
+                        value={shortcut}
+                        onChange={(e) => setShortcut(e.target.value.toUpperCase().slice(0, 3))}
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30"
+                        placeholder="TR"
+                        maxLength={3}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Überkonto</label>
+                    <select
+                      value={parentId || ''}
+                      onChange={(e) => setParentId(e.target.value || null)}
+                      className="w-full appearance-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30"
+                    >
+                      <option value="">Kein Überkonto</option>
+                      {parentOptions.map(ex => (
+                        <option key={ex.id} value={ex.id}>{ex.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-              )}
+
+                <div className="flex flex-col gap-3 border-t border-white/10 bg-slate-950/60 p-5 sm:flex-row sm:justify-end sm:p-6">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="rounded-2xl border border-slate-700 bg-slate-800/70 px-5 py-3 font-medium text-slate-200 transition hover:bg-slate-700 hover:text-white"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 font-semibold text-white shadow-lg shadow-blue-950/30 transition hover:from-blue-500 hover:to-cyan-400"
+                  >
+                    {editingId ? 'Änderungen speichern' : 'Konto anlegen'}
+                  </button>
+                </div>
+              </form>
             </div>
-            <div className="flex justify-end space-x-3 pt-2">
-              <button type="button" onClick={resetForm} className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors border border-transparent hover:border-slate-600/50">Abbrechen</button>
-              <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors shadow-lg shadow-blue-500/20">{editingId ? 'Aktualisieren' : 'Hinzufügen'}</button>
-            </div>
-          </form>
-        ) : (
-          <button onClick={() => setIsAdding(true)} className="mt-4 w-full py-3.5 border-2 border-dashed border-slate-600/50 rounded-xl text-slate-400 hover:text-white hover:border-slate-500 hover:bg-slate-700/20 transition-all font-medium flex items-center justify-center">
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Börse / Konto hinzufügen
-          </button>
-        )}
+          </div>
+        ), document.body)}
 
         {/* Kreisdiagramm zur Visualisierung der Vermögensverteilung */}
         {pricesLoading ? (
@@ -620,54 +714,131 @@ export const VermoegenOverview: React.FC = () => {
           </div>
         )}
 
-        {/* Add Product Modal */}
-        {isAddProductModalOpen && targetExchange && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-2xl border border-slate-600/30 p-6 w-full max-w-sm shadow-2xl">
-              <h3 className="text-lg font-semibold text-white mb-4">ISIN zu {targetExchange.name} hinzufügen</h3>
-              <form onSubmit={handleSaveProduct} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">ISIN</label>
-                  <input
-                    type="text"
-                    value={modalIsin}
-                    onChange={(e) => setModalIsin(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="z.B. DE000A1YB8A1"
-                    required
-                    autoFocus
-                  />
+        {depotExchange && createPortal((
+          <div className="fixed inset-0 z-50 flex min-h-dvh items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-emerald-400/20 bg-slate-900/95 shadow-2xl shadow-black/40">
+              <form onSubmit={handleSaveDepot}>
+                <div className="border-b border-emerald-400/10 bg-gradient-to-br from-emerald-500/15 via-cyan-500/10 to-slate-900 p-5 sm:p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300/80">Depot bearbeiten</p>
+                      <h3 className="text-2xl font-bold text-white">{depotExchange.name}</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeDepotModal}
+                      className="rounded-full bg-white/10 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+                      aria-label="Depot-Modal schließen"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Anteile</label>
-                  <input
-                    type="text"
-                    value={modalShares}
-                    onChange={(e) => setModalShares(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0,00"
-                    required
-                  />
+
+                <div className="max-h-[70dvh] space-y-5 overflow-y-auto p-5 sm:p-6">
+                  <div className="rounded-2xl border border-emerald-400/10 bg-emerald-400/5 p-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_minmax(0,1fr)_10rem_auto] sm:items-end">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-slate-300">Typ</label>
+                        <select
+                          value={newProductType}
+                          onChange={(e) => {
+                            const nextType = e.target.value as NonNullable<PortfolioProduct['type']>;
+                            setNewProductType(nextType);
+                            setNewProductIsin(nextType === 'btc' ? 'BTC' : '');
+                          }}
+                          className="w-full appearance-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
+                        >
+                          <option value="isin">ISIN</option>
+                          <option value="btc">BTC</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-slate-300">{newProductType === 'btc' ? 'Produkt' : 'ISIN'}</label>
+                        {newProductType === 'btc' ? (
+                          <div className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white">
+                            Bitcoin (BTC)
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={newProductIsin}
+                            onChange={(e) => setNewProductIsin(e.target.value.toUpperCase())}
+                            className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
+                            placeholder="IE00BKM4GZ66"
+                            autoFocus
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-slate-300">Anteile</label>
+                        <input
+                          type="text"
+                          value={newProductShares}
+                          onChange={(e) => setNewProductShares(e.target.value)}
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
+                          placeholder="0,00"
+                          inputMode="decimal"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddProductDraft}
+                        className="rounded-2xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-500"
+                      >
+                        Hinzufügen
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-200">Produkte</p>
+                      <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-slate-400">{products.length} Einträge</span>
+                    </div>
+                    {products.length > 0 ? (
+                      products.map((product) => (
+                        <div key={product.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700/70 bg-slate-950/50 p-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">{getProductLabel(product)}</p>
+                            <p className="mt-1 text-xs text-slate-400">Anteile: {product.shares}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeProductDraft(product.id)}
+                            className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20 hover:text-red-200"
+                          >
+                            Entfernen
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-700 p-6 text-center">
+                        <p className="text-sm font-medium text-slate-300">Noch keine Produkte im Depot.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t border-slate-700/50 mt-2">
+
+                <div className="flex flex-col gap-3 border-t border-white/10 bg-slate-950/60 p-5 sm:flex-row sm:justify-end sm:p-6">
                   <button
                     type="button"
-                    onClick={() => { setIsAddProductModalOpen(false); setTargetExchange(null); }}
-                    className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-colors border border-transparent"
+                    onClick={closeDepotModal}
+                    className="rounded-2xl border border-slate-700 bg-slate-800/70 px-5 py-3 font-medium text-slate-200 transition hover:bg-slate-700 hover:text-white"
                   >
                     Abbrechen
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-500 rounded-lg transition-colors shadow-lg shadow-green-500/20"
+                    className="rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-500 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-950/30 transition hover:from-emerald-500 hover:to-cyan-400"
                   >
-                    Hinzufügen
+                    Depot speichern
                   </button>
                 </div>
               </form>
             </div>
           </div>
-        )}
+        ), document.body)}
         </div>
       </div>
     </div>

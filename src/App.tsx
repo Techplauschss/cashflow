@@ -31,6 +31,7 @@ const PageFallback = () => (
 );
 
 const navItems = [
+  { to: '/', label: 'Cashflow' },
   { to: '/bilanzen', label: 'Bilanzen' },
   { to: '/analytics', label: 'Analytics' },
   { to: '/vermoegen', label: 'Vermögen' },
@@ -96,19 +97,23 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
             </Link>
             <div className="w-12 sm:w-16 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-3 sm:mb-6 opacity-60"></div>
             <nav className="-mx-3 flex snap-x items-center gap-2 overflow-x-auto px-3 pb-1 text-xs mobile-scrollbar-none sm:mx-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:pb-0 sm:text-sm">
-              {navItems.map(item => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`shrink-0 snap-start rounded-full border px-3.5 py-2 font-medium transition-colors ${
-                    location.pathname === item.to
-                      ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-lg shadow-cyan-950/20'
-                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {navItems.map(item => {
+                const isActive = location.pathname === item.to;
+
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`shrink-0 snap-start rounded-full border px-3.5 py-2 font-medium transition-colors ${
+                      isActive
+                        ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-lg shadow-cyan-950/20'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
           </div>

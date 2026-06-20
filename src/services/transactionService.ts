@@ -28,10 +28,13 @@ const EXCHANGE_NAME_GROUPS: Record<'TR' | 'SP' | 'B' | 'V', string[]> = {
   V: ['vivid', 'vivid giro', 'v'],
 };
 
+export type PortfolioProductType = 'isin' | 'btc';
+
 export interface PortfolioProduct {
   id: string;
   isin: string;
   shares: number;
+  type?: PortfolioProductType;
 }
 
 export interface Exchange {

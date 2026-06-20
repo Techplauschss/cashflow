@@ -50,7 +50,15 @@ npm run dev
 
 ### 4. Live-Kurse für Finanzprodukte
 
-Für die Vermögensübersicht können Finanzprodukte per ISIN hinterlegt werden. Die App nutzt `VITE_EODHD_API_KEY` für zuverlässiges ISIN-Mapping und fällt ohne Key auf eine Yahoo-Finance-Suche zurück, sofern Yahoo für die ISIN ein abrufbares Symbol bereitstellt.
+Für die Vermögensübersicht können Finanzprodukte per ISIN hinterlegt werden. Die App nutzt `VITE_EODHD_API_KEY` für ISIN-Mapping und Live-Kurse über EODHD. Nicht-EUR-Kurse werden über Frankfurter FX-Rates nach EUR umgerechnet.
+
+Legen Sie dafür lokal eine `.env.local` an:
+
+```bash
+VITE_EODHD_API_KEY=YOUR_EODHD_API_KEY
+```
+
+Die Datei `.env.local` darf nicht committed werden. Für `IE00BKM4GZ66` wird bevorzugt der EUR-Ticker `IS3N.XETRA` verwendet.
 
 ## 📱 Verwendung
 
