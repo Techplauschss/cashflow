@@ -60,6 +60,8 @@ VITE_EODHD_API_KEY=YOUR_EODHD_API_KEY
 
 Die Datei `.env.local` darf nicht committed werden. Für `IE00BKM4GZ66` wird bevorzugt der EUR-Ticker `IS3N.XETRA` verwendet.
 
+Für Firebase Hosting muss der Key zusätzlich als GitHub Actions Secret `VITE_EODHD_API_KEY` im Repository hinterlegt sein. Die Firebase-Workflows lesen dieses Secret beim Production-/Preview-Build ein; ohne dieses Secret sind ISIN-Livekurse in der deployed App nicht verfügbar.
+
 ## 📱 Verwendung
 
 1. **Neue Transaktion hinzufügen**: Wählen Sie den Typ (Einnahme/Ausgabe), geben Sie Betrag, Beschreibung und Kategorie ein
