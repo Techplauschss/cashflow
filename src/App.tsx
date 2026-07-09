@@ -16,6 +16,7 @@ const TankenPage = lazy(() => import('./components/TankenPage').then(module => (
 const BusinessOverviewPage = lazy(() => import('./components/BusinessOverviewPage').then(module => ({ default: module.BusinessOverviewPage })));
 const HMPage = lazy(() => import('./components/HMPage').then(module => ({ default: module.HMPage })));
 const SettingsPage = lazy(() => import('./components/SettingsPage').then(module => ({ default: module.SettingsPage })));
+const Game2048Page = lazy(() => import('./components/Game2048Page').then(module => ({ default: module.Game2048Page })));
 
 const UI_MESSAGES = {
   ADD_ERROR: 'Fehler beim Hinzufügen der Transaktion. Bitte versuchen Sie es erneut.',
@@ -37,6 +38,7 @@ const navItems = [
   { to: '/vermoegen', label: 'Vermögen' },
   { to: '/business', label: 'Business' },
   { to: '/tanken', label: 'Tanken' },
+  { to: '/spiel', label: 'Spiel' },
   { to: '/settings', label: 'Einstellungen' },
 ];
 
@@ -252,6 +254,7 @@ function App() {
               />
             } />
             <Route path="/hm" element={<HMPage />} />
+            <Route path="/spiel" element={<Game2048Page />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </Suspense>
