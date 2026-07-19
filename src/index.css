@@ -165,6 +165,36 @@ textarea {
   box-shadow: 0 12px 24px -12px rgba(59, 130, 246, 0.4);
 }
 
+/* ===== Mobile-Optimierung des Aurora-Hintergrunds =====
+   Große, stark verwaschene Blobs sind auf Handy-GPUs teuer.
+   Auf kleinen Screens: kompaktere Blobs, weniger Blur, kein Blend-Mode. */
+@media (max-width: 640px) {
+  .aurora-bg .aurora-blob {
+    filter: blur(55px);
+    mix-blend-mode: normal;
+    opacity: 0.4;
+  }
+
+  .aurora-bg .aurora-blob--1 {
+    width: 22rem;
+    height: 22rem;
+    top: -8rem;
+    left: -7rem;
+  }
+
+  .aurora-bg .aurora-blob--2 {
+    width: 20rem;
+    height: 20rem;
+    bottom: -9rem;
+    right: -6rem;
+  }
+
+  /* Dritten Blob auf Mobile ausblenden – spart eine Kompositionsebene */
+  .aurora-bg .aurora-blob--3 {
+    display: none;
+  }
+}
+
 /* Bewegung reduzieren, wenn vom Nutzer gewünscht */
 @media (prefers-reduced-motion: reduce) {
   .aurora-bg .aurora-blob,
