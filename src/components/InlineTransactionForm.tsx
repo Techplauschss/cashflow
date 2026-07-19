@@ -151,7 +151,7 @@ export const InlineTransactionForm: React.FC<InlineTransactionFormProps> = ({ pr
   };
 
   return (
-    <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-3.5 shadow-2xl sm:p-6">
+    <div className="glow-card bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-3.5 shadow-2xl sm:p-6">
       <form className="space-y-3.5 sm:space-y-6" onSubmit={handleSubmit}>
         <div className="block space-y-3 sm:hidden">
           <div className="relative">

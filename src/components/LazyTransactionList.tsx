@@ -606,7 +606,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     return (
       <article
         key={transaction.id}
-        className={`group relative rounded-2xl border p-3 shadow-lg shadow-black/10 transition-all sm:p-3 ${
+        className={`group lift-hover relative rounded-2xl border p-3 shadow-lg shadow-black/10 sm:p-3 ${
           isTanken
             ? 'border-blue-800/50 bg-blue-900/20 hover:bg-blue-900/60'
             : 'border-slate-600/30 bg-slate-800/40 hover:bg-slate-800/50'
@@ -762,7 +762,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   // Haupt-Render
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3.5 shadow-2xl backdrop-blur-lg sm:mt-8 sm:p-4">
+      <div className="glow-card mt-4 rounded-2xl border border-white/10 bg-white/5 p-3.5 shadow-2xl backdrop-blur-lg sm:mt-8 sm:p-4">
       <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
           {/* Title and Year Selection - direkt nebeneinander */}

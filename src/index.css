@@ -29,7 +29,8 @@ body {
 
 #root {
   min-height: 100dvh;
-  background: linear-gradient(135deg, #0f172a 0%, #581c87 50%, #0f172a 100%);
+  position: relative;
+  background: linear-gradient(135deg, #0b1120 0%, #1e1b4b 45%, #0b1120 100%);
 }
 
 * {
@@ -42,4 +43,135 @@ input,
 select,
 textarea {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== Animierter Aurora-Hintergrund ===== */
+.aurora-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aurora-bg .aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.55;
+  will-change: transform;
+  mix-blend-mode: screen;
+}
+
+.aurora-bg .aurora-blob--1 {
+  width: 42rem;
+  height: 42rem;
+  top: -12rem;
+  left: -10rem;
+  background: radial-gradient(circle at 30% 30%, #3b82f6, transparent 70%);
+  animation: aurora-drift-1 22s ease-in-out infinite;
+}
+
+.aurora-bg .aurora-blob--2 {
+  width: 38rem;
+  height: 38rem;
+  bottom: -14rem;
+  right: -8rem;
+  background: radial-gradient(circle at 60% 40%, #a855f7, transparent 70%);
+  animation: aurora-drift-2 26s ease-in-out infinite;
+}
+
+.aurora-bg .aurora-blob--3 {
+  width: 32rem;
+  height: 32rem;
+  top: 30%;
+  left: 45%;
+  background: radial-gradient(circle at 50% 50%, #06b6d4, transparent 70%);
+  opacity: 0.4;
+  animation: aurora-drift-3 30s ease-in-out infinite;
+}
+
+@keyframes aurora-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6rem, 4rem) scale(1.15); }
+}
+
+@keyframes aurora-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1.05); }
+  50% { transform: translate(-5rem, -3rem) scale(0.9); }
+}
+
+@keyframes aurora-drift-3 {
+  0%, 100% { transform: translate(-50%, 0) scale(1); }
+  33% { transform: translate(-40%, -4rem) scale(1.1); }
+  66% { transform: translate(-60%, 3rem) scale(0.95); }
+}
+
+/* Alle Seiteninhalte über der Aurora halten */
+#root > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== Schimmernder Verlaufstitel ===== */
+.title-shimmer {
+  background: linear-gradient(
+    100deg,
+    #60a5fa 0%,
+    #c084fc 25%,
+    #22d3ee 50%,
+    #c084fc 75%,
+    #60a5fa 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: title-shimmer 6s linear infinite;
+}
+
+@keyframes title-shimmer {
+  to { background-position: 200% center; }
+}
+
+/* ===== Glow-Karten & Hover-Lift ===== */
+.glow-card {
+  position: relative;
+  box-shadow: 0 10px 40px -12px rgba(59, 130, 246, 0.25),
+    0 2px 8px -2px rgba(0, 0, 0, 0.4);
+}
+
+.glow-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.4), rgba(192, 132, 252, 0.15) 50%, rgba(34, 211, 238, 0.35));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.lift-hover {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, background-color 0.2s ease-out;
+}
+
+.lift-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -12px rgba(59, 130, 246, 0.4);
+}
+
+/* Bewegung reduzieren, wenn vom Nutzer gewünscht */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-bg .aurora-blob,
+  .title-shimmer {
+    animation: none;
+  }
+  .lift-hover:hover {
+    transform: none;
+  }
 }
