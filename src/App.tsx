@@ -84,18 +84,25 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="min-h-dvh bg-transparent app-bottom-safe">
+      {/* Animierter Aurora-Hintergrund */}
+      <div className="aurora-bg" aria-hidden="true">
+        <span className="aurora-blob aurora-blob--1" />
+        <span className="aurora-blob aurora-blob--2" />
+        <span className="aurora-blob aurora-blob--3" />
+      </div>
+
       {/* Global Header mit Navigation - nur anzeigen wenn nicht auf H+M Seite */}
       {!isHMPage && (
         <header className="sticky top-0 z-30 w-full border-b border-white/5 bg-slate-950/70 backdrop-blur-xl sm:static sm:border-b-0 sm:bg-transparent sm:backdrop-blur-none">
           <div className="w-full max-w-4xl mx-auto app-safe-area pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-4 sm:pt-8">
           <div className="text-center pb-3 sm:mb-8 sm:pb-0">
-            <Link 
-              to="/" 
-              className="inline-block text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent mb-2 sm:mb-3 tracking-tight hover:from-blue-300 hover:via-purple-400 hover:to-cyan-300 transition-all duration-200"
+            <Link
+              to="/"
+              className="title-shimmer inline-block text-2xl sm:text-4xl font-extrabold mb-2 sm:mb-3 tracking-tight transition-transform duration-200 hover:scale-[1.03]"
             >
               Cashflow
             </Link>
-            <div className="w-12 sm:w-16 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 mx-auto mb-3 sm:mb-6 opacity-60"></div>
+            <div className="mx-auto mb-3 h-0.5 w-12 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.7)] sm:mb-6 sm:w-20"></div>
             <nav className="-mx-3 flex snap-x items-center gap-2 overflow-x-auto px-3 pb-1 text-xs mobile-scrollbar-none sm:mx-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:pb-0 sm:text-sm">
               {navItems.map(item => {
                 const isActive = location.pathname === item.to;
@@ -104,10 +111,10 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                   <Link
                     key={item.to}
                     to={item.to}
-                    className={`shrink-0 snap-start rounded-full border px-3.5 py-2 font-medium transition-colors ${
+                    className={`shrink-0 snap-start rounded-full border px-3.5 py-2 font-medium transition-all duration-200 ${
                       isActive
-                        ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-lg shadow-cyan-950/20'
-                        : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                        ? 'border-cyan-400/40 bg-cyan-500/15 text-cyan-100 shadow-[0_0_16px_-2px_rgba(34,211,238,0.5)]'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/10 hover:text-white'
                     }`}
                   >
                     {item.label}
