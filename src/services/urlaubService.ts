@@ -70,7 +70,8 @@ export const addUrlaubExpense = async (
   urlaubId: string,
   category: UrlaubCategory,
   amount: number,
-  description: string
+  description: string,
+  location: string
 ): Promise<string> => {
   const expensesRef = ref(database, `urlaube/${urlaubId}/expenses`);
   try {
@@ -78,6 +79,7 @@ export const addUrlaubExpense = async (
       category,
       amount,
       description,
+      location,
       timestamp: Date.now(),
     });
     return newRef.key!;

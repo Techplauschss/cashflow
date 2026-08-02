@@ -13,6 +13,7 @@ export interface UrlaubExpense {
   category: UrlaubCategory;
   amount: number;
   description: string;
+  location: string;
   timestamp: number;
 }
 

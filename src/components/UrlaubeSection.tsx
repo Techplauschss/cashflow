@@ -23,6 +23,7 @@ const CategoryExpenses: React.FC<{
   const [isAdding, setIsAdding] = useState(false);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -37,9 +38,10 @@ const CategoryExpenses: React.FC<{
 
     setIsSaving(true);
     try {
-      await addUrlaubExpense(urlaubId, category, numericAmount, description.trim());
+      await addUrlaubExpense(urlaubId, category, numericAmount, description.trim(), location.trim() || 'Unbekannt');
       setAmount('');
       setDescription('');
+      setLocation('');
       setIsAdding(false);
     } catch (error) {
       console.error('Error adding Urlaub expense:', error);
@@ -81,7 +83,10 @@ const CategoryExpenses: React.FC<{
         <div className="mt-2 space-y-1.5">
           {expenses.map((expense) => (
             <div key={expense.id} className="group flex items-center justify-between gap-2 rounded-lg bg-slate-800/40 px-2.5 py-1.5 text-sm">
-              <span className="min-w-0 truncate text-slate-300">{expense.description}</span>
+              <span className="min-w-0 truncate text-slate-300">
+                {expense.description}
+                {expense.location && <span className="text-slate-500"> • {expense.location}</span>}
+              </span>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="font-medium text-slate-200">{formatAmount(expense.amount)}</span>
                 <button
@@ -101,7 +106,7 @@ const CategoryExpenses: React.FC<{
       )}
 
       {isAdding && (
-        <form onSubmit={handleAdd} className="mt-2 flex items-center gap-2">
+        <form onSubmit={handleAdd} className="mt-2 flex flex-wrap items-center gap-2">
           <input
             type="text"
             value={amount}
@@ -116,6 +121,13 @@ const CategoryExpenses: React.FC<{
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Beschreibung"
+            className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400"
+          />
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Ort"
             className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400"
           />
           <button
