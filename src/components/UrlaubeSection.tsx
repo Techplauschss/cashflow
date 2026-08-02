@@ -20,6 +20,7 @@ const CategoryExpenses: React.FC<{
   label: string;
   expenses: UrlaubExpense[];
 }> = ({ urlaubId, category, label, expenses }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -27,6 +28,12 @@ const CategoryExpenses: React.FC<{
   const [isSaving, setIsSaving] = useState(false);
 
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+  const handleToggleAdding = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsAdding((v) => !v);
+    setIsExpanded(true);
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,13 +69,28 @@ const CategoryExpenses: React.FC<{
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-900/20 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-slate-300">{label}</span>
-        <div className="flex items-center gap-2">
+      <div className="flex w-full items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm font-medium text-slate-300"
+        >
+          <svg
+            className={`h-3.5 w-3.5 shrink-0 text-slate-500 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          <span className="truncate">{label}</span>
+          {expenses.length > 0 && <span className="shrink-0 text-xs text-slate-500">({expenses.length})</span>}
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
           {total > 0 && <span className="text-sm font-semibold text-amber-300">{formatAmount(total)}</span>}
           <button
             type="button"
-            onClick={() => setIsAdding((v) => !v)}
+            onClick={handleToggleAdding}
             className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-200 transition-colors hover:bg-amber-500/20"
             title={`Ausgabe zu ${label} hinzufügen`}
           >
@@ -79,7 +101,7 @@ const CategoryExpenses: React.FC<{
         </div>
       </div>
 
-      {expenses.length > 0 && (
+      {isExpanded && expenses.length > 0 && (
         <div className="mt-2 space-y-1.5">
           {expenses.map((expense) => (
             <div key={expense.id} className="group flex items-center justify-between gap-2 rounded-lg bg-slate-800/40 px-2.5 py-1.5 text-sm">
@@ -105,7 +127,7 @@ const CategoryExpenses: React.FC<{
         </div>
       )}
 
-      {isAdding && (
+      {isExpanded && isAdding && (
         <form onSubmit={handleAdd} className="mt-2 flex flex-wrap items-center gap-2">
           <input
             type="text"
