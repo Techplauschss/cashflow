@@ -1,8 +1,11 @@
 import { useState, useEffect, forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { Transaction } from '../types/Transaction';
+import type { Urlaub } from '../types/Urlaub';
 import { getTransactionsForMonth, getAvailableMonths, isHMTransaction, getOneTimeInvestmentsForYear, updateKilometerstand, updateLiter } from '../services/transactionService';
+import { subscribeToUrlaube } from '../services/urlaubService';
 import { DropdownMenu } from './DropdownMenu';
+import { UrlaubeSection } from './UrlaubeSection';
 
 interface MonthData {
   year: number;
@@ -38,6 +41,7 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
   const [isOneTimeExpanded, setIsOneTimeExpanded] = useState(false);
   const [isLoadingOneTime, setIsLoadingOneTime] = useState(false);
   const [visibleInvestmentDates, setVisibleInvestmentDates] = useState<Set<string>>(new Set());
+  const [urlaube, setUrlaube] = useState<Urlaub[]>([]);
 
   // NEU: Ref für den aktuellen State der Monate, um bei asynchronen Updates keine veralteten Closures zu haben
   const monthsRef = useRef<MonthData[]>(months);
@@ -584,6 +588,12 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Urlaube live abonnieren
+  useEffect(() => {
+    const unsubscribe = subscribeToUrlaube(setUrlaube);
+    return () => unsubscribe();
+  }, []);
+
   // Listener für Änderungen an Transaktionen (z.B. aus Modal in App.tsx)
   useEffect(() => {
     window.addEventListener('transaction-changed', refreshData);
@@ -982,7 +992,10 @@ export const LazyTransactionList = forwardRef<LazyTransactionListRef, LazyTransa
           </div>
         ))}
       </div>
-      
+
+      {/* Urlaube Section */}
+      <UrlaubeSection urlaube={urlaube} selectedYear={selectedYear} />
+
       {/* Einzelinvestitionen Section */}
       {allMonths.some(m => m.year === selectedYear) && (
         <div className="mt-4 border-t border-slate-600/30 pt-4">
