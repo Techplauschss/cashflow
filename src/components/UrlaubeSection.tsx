@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { addUrlaub, updateUrlaub, deleteUrlaub, addUrlaubExpense, deleteUrlaubExpense } from '../services/urlaubService';
+import {
+  addUrlaub,
+  updateUrlaub,
+  deleteUrlaub,
+  addUrlaubExpense,
+  updateUrlaubExpense,
+  deleteUrlaubExpense,
+} from '../services/urlaubService';
 import { URLAUB_CATEGORIES, type Urlaub, type UrlaubCategory, type UrlaubExpense } from '../types/Urlaub';
 import { DropdownMenu } from './DropdownMenu';
 
@@ -13,6 +20,126 @@ const formatAmount = (amount: number): string =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
 
 const formatDate = (date: string): string => (date ? new Date(date).toLocaleDateString('de-DE') : '');
+
+const ExpenseRow: React.FC<{ urlaubId: string; expense: UrlaubExpense }> = ({ urlaubId, expense }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const startEdit = () => {
+    setAmount(expense.amount.toFixed(2).replace('.', ','));
+    setDescription(expense.description);
+    setLocation(expense.location || '');
+    setIsEditing(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'));
+    if (!description.trim() || isNaN(numericAmount) || numericAmount <= 0) {
+      alert('Bitte Betrag und Beschreibung angeben.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateUrlaubExpense(urlaubId, expense.id, numericAmount, description.trim(), location.trim() || 'Unbekannt');
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating Urlaub expense:', error);
+      alert('Fehler beim Aktualisieren der Ausgabe.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteUrlaubExpense(urlaubId, expense.id);
+    } catch (error) {
+      console.error('Error deleting Urlaub expense:', error);
+      alert('Fehler beim Löschen der Ausgabe.');
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <form onSubmit={handleSave} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-800/60 px-2.5 py-1.5">
+        <input
+          type="text"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0,00"
+          inputMode="decimal"
+          autoFocus
+          className="w-20 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400"
+        />
+        <input
+          type="text"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Beschreibung"
+          className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400"
+        />
+        <input
+          type="text"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="Ort"
+          className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400"
+        />
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-500 disabled:opacity-50"
+        >
+          {isSaving ? '...' : 'OK'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsEditing(false)}
+          className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700/50"
+        >
+          Abbrechen
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <div className="group flex items-center justify-between gap-2 rounded-lg bg-slate-800/40 px-2.5 py-1.5 text-sm">
+      <span className="min-w-0 truncate text-slate-300">
+        {expense.description}
+        {expense.location && <span className="text-slate-500"> • {expense.location}</span>}
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="font-medium text-slate-200">{formatAmount(expense.amount)}</span>
+        <button
+          type="button"
+          onClick={startEdit}
+          className="text-slate-500 opacity-0 transition-opacity hover:text-blue-400 group-hover:opacity-100"
+          title="Ausgabe bearbeiten"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="text-slate-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+          title="Ausgabe löschen"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const CategoryExpenses: React.FC<{
   urlaubId: string;
@@ -58,15 +185,6 @@ const CategoryExpenses: React.FC<{
     }
   };
 
-  const handleDelete = async (expenseId: string) => {
-    try {
-      await deleteUrlaubExpense(urlaubId, expenseId);
-    } catch (error) {
-      console.error('Error deleting Urlaub expense:', error);
-      alert('Fehler beim Löschen der Ausgabe.');
-    }
-  };
-
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-900/20 p-3">
       <div className="flex w-full items-center justify-between gap-2">
@@ -104,25 +222,7 @@ const CategoryExpenses: React.FC<{
       {isExpanded && expenses.length > 0 && (
         <div className="mt-2 space-y-1.5">
           {expenses.map((expense) => (
-            <div key={expense.id} className="group flex items-center justify-between gap-2 rounded-lg bg-slate-800/40 px-2.5 py-1.5 text-sm">
-              <span className="min-w-0 truncate text-slate-300">
-                {expense.description}
-                {expense.location && <span className="text-slate-500"> • {expense.location}</span>}
-              </span>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="font-medium text-slate-200">{formatAmount(expense.amount)}</span>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(expense.id)}
-                  className="text-slate-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-                  title="Ausgabe löschen"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <ExpenseRow key={expense.id} urlaubId={urlaubId} expense={expense} />
           ))}
         </div>
       )}

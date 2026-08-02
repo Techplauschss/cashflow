@@ -89,6 +89,22 @@ export const addUrlaubExpense = async (
   }
 };
 
+export const updateUrlaubExpense = async (
+  urlaubId: string,
+  expenseId: string,
+  amount: number,
+  description: string,
+  location: string
+): Promise<void> => {
+  const expenseRef = ref(database, `urlaube/${urlaubId}/expenses/${expenseId}`);
+  try {
+    await update(expenseRef, { amount, description, location });
+  } catch (error) {
+    console.error('Error updating Urlaub expense:', error);
+    throw new Error('Fehler beim Aktualisieren der Ausgabe');
+  }
+};
+
 export const deleteUrlaubExpense = async (urlaubId: string, expenseId: string): Promise<void> => {
   const expenseRef = ref(database, `urlaube/${urlaubId}/expenses/${expenseId}`);
   try {
