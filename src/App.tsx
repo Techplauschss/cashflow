@@ -10,7 +10,6 @@ import { addTransaction, deleteTransaction, updateTransaction } from './services
 import type { Transaction } from './types/Transaction';
 
 const BilanzPage = lazy(() => import('./components/BilanzPage').then(module => ({ default: module.BilanzPage })));
-const DarkAnalyticsPage = lazy(() => import('./components/DarkAnalyticsPage').then(module => ({ default: module.DarkAnalyticsPage })));
 const VermoegenOverview = lazy(() => import('./components/VermoegenOverview').then(module => ({ default: module.VermoegenOverview })));
 const TankenPage = lazy(() => import('./components/TankenPage').then(module => ({ default: module.TankenPage })));
 const BusinessOverviewPage = lazy(() => import('./components/BusinessOverviewPage').then(module => ({ default: module.BusinessOverviewPage })));
@@ -31,12 +30,11 @@ const PageFallback = () => (
 );
 
 const navItems = [
-  { to: '/', label: 'Cashflow' },
-  { to: '/bilanzen', label: 'Bilanzen' },
-  { to: '/analytics', label: 'Analytics' },
-  { to: '/vermoegen', label: 'Vermögen' },
+  { to: '/', label: 'Privat' },
   { to: '/business', label: 'Business' },
   { to: '/tanken', label: 'Tanken' },
+  { to: '/bilanzen', label: 'Bilanzen' },
+  { to: '/vermoegen', label: 'Vermögen' },
   { to: '/settings', label: 'Einstellungen' },
 ];
 
@@ -241,7 +239,6 @@ function App() {
               />
             } />
             <Route path="/bilanzen" element={<BilanzPage />} />
-            <Route path="/analytics" element={<DarkAnalyticsPage />} />
             <Route path="/vermoegen" element={<VermoegenOverview />} />
             <Route path="/tanken" element={<TankenPage />} />
             <Route path="/business" element={

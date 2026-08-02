@@ -32,7 +32,7 @@ export const VermoegenOverview: React.FC = () => {
     return exchanges.flatMap(ex => ex.products || []);
   }, [exchanges]);
 
-  const { quotes, loading: pricesLoading, error: pricesError, failedIsins, refetchPrices } = useLivePrices(allProducts);
+  const { quotes, loading: pricesLoading, error: pricesError, refetchPrices } = useLivePrices(allProducts);
 
   const getProductType = (product: PortfolioProduct): NonNullable<PortfolioProduct['type']> => (
     product.type ?? (product.isin.trim().toUpperCase() === 'BTC' ? 'btc' : 'isin')
@@ -103,10 +103,6 @@ export const VermoegenOverview: React.FC = () => {
     const lower = accountName.trim().toLowerCase();
     return lower.includes('portfolio') || lower.includes('depot');
   };
-
-  const shouldShowPortfolioPanel = (exchange: Exchange) => (
-    hasPortfolioFeatures(exchange.name) || (exchange.products?.length ?? 0) > 0
-  );
 
   const getChildren = (id: string) => exchanges.filter((ex) => ex.parentId === id);
   const hasChildren = (id: string | null) => !!id && exchanges.some((ex) => ex.parentId === id);
@@ -276,52 +272,6 @@ export const VermoegenOverview: React.FC = () => {
     setProducts((current) => current.filter((product) => product.id !== productId));
   };
 
-   // Funktion zum Rendern der Portfolio-Produkte (inkl. Ladezustände & Live-Kurse)
-  const renderProducts = (exchange: Exchange) => (
-    <div className="space-y-2">
-      {(exchange.products || []).map((product) => {
-        const productLabel = getProductLabel(product);
-        const quoteKey = getProductQuoteKey(product);
-        const liveQuote = quotes[quoteKey];
-        const isFailed = failedIsins.has(quoteKey);
-        const totalValue = liveQuote ? liveQuote.priceEur * product.shares : 0;
-        
-        return (
-          <div key={product.id} className="group flex items-center justify-between gap-3 rounded-lg bg-slate-800/50 hover:bg-slate-800/70 transition-colors px-3 py-2 text-slate-200 text-sm">
-            <div className="flex flex-col">
-              <span className="font-medium">{productLabel}</span>
-              <span className="text-slate-400">Anteile: {product.shares}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col text-right">
-                {pricesLoading ? (
-                  <div className="animate-pulse flex flex-col items-end gap-1 mt-1">
-                    <div className="h-4 w-16 bg-slate-600 rounded"></div>
-                    <div className="h-3 w-12 bg-slate-600 rounded"></div>
-                  </div>
-                ) : isFailed ? (
-                  <span className="text-amber-400 text-xs">Kurs nicht verfügbar</span>
-                ) : liveQuote ? (
-                  <>
-                    <span className="font-semibold text-green-400">{formatAmount(totalValue)}</span>
-                    <span className="text-xs text-slate-400">{formatAmount(liveQuote.priceEur)} / Stück</span>
-                    {liveQuote.currency !== 'EUR' && (
-                      <span className="text-[11px] text-slate-500">
-                        {liveQuote.currency} {liveQuote.price.toFixed(2)} → EUR
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-slate-500 text-xs">Warte auf Kurs...</span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-
   const renderAccountChildren = (parentAccount: Exchange, level = 1): React.ReactNode => {
     const children = getChildren(parentAccount.id)
       .sort((a, b) => getExchangeTotalValue(b) - getExchangeTotalValue(a));
@@ -367,38 +317,6 @@ export const VermoegenOverview: React.FC = () => {
                   </div>
                 </div>
               </div>
-              {shouldShowPortfolioPanel(child) && (
-                <div className="pl-6 sm:pl-8 pb-2">
-                  <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{child.products?.length ?? 0} Einträge</span>
-                        {hasPortfolioFeatures(child.name) && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenDepotModal(child, e)}
-                            className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
-                          >
-                            + Produkt
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {child.products && child.products.length > 0 ? (
-                      renderProducts(child)
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenDepotModal(child, e)}
-                        className="w-full rounded-xl border border-dashed border-emerald-500/25 bg-emerald-500/5 px-3 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
-                      >
-                        Erstes Finanzprodukt hinzufügen
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
               {renderAccountChildren(child, level + 1)}
             </React.Fragment>
           );
@@ -507,40 +425,6 @@ export const VermoegenOverview: React.FC = () => {
                     </div>
                   </div>
                 </div>
-
-              {/* Main Account Products */}
-              {shouldShowPortfolioPanel(mainExchange) && (
-                <div className="pl-6 sm:pl-8 pb-2 mt-2 border-l-2 border-transparent ml-3 sm:ml-4">
-                  <div className="space-y-2 bg-slate-900/20 border border-slate-700/50 rounded-xl p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-slate-300 text-sm font-medium">Portfolio-Produkte</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{mainExchange.products?.length ?? 0} Einträge</span>
-                        {hasPortfolioFeatures(mainExchange.name) && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenDepotModal(mainExchange, e)}
-                            className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
-                          >
-                            + Produkt
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {mainExchange.products && mainExchange.products.length > 0 ? (
-                      renderProducts(mainExchange)
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenDepotModal(mainExchange, e)}
-                        className="w-full rounded-xl border border-dashed border-emerald-500/25 bg-emerald-500/5 px-3 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
-                      >
-                        Erstes Finanzprodukt hinzufügen
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
                 {renderAccountChildren(mainExchange)}
               </div>
