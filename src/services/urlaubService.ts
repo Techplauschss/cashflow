@@ -1,4 +1,4 @@
-import { ref, push, onValue, off, remove } from 'firebase/database';
+import { ref, push, onValue, off, remove, update } from 'firebase/database';
 import { database } from '../firebase';
 import type { Urlaub, UrlaubCategory, UrlaubExpense } from '../types/Urlaub';
 
@@ -43,6 +43,16 @@ export const addUrlaub = async (name: string, startDate: string, endDate: string
   } catch (error) {
     console.error('Error adding Urlaub:', error);
     throw new Error('Fehler beim Anlegen des Urlaubs');
+  }
+};
+
+export const updateUrlaub = async (id: string, name: string, startDate: string, endDate: string): Promise<void> => {
+  const urlaubRef = ref(database, `urlaube/${id}`);
+  try {
+    await update(urlaubRef, { name, startDate, endDate });
+  } catch (error) {
+    console.error('Error updating Urlaub:', error);
+    throw new Error('Fehler beim Aktualisieren des Urlaubs');
   }
 };
 

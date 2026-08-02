@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { addUrlaub, deleteUrlaub, addUrlaubExpense, deleteUrlaubExpense } from '../services/urlaubService';
+import { addUrlaub, updateUrlaub, deleteUrlaub, addUrlaubExpense, deleteUrlaubExpense } from '../services/urlaubService';
 import { URLAUB_CATEGORIES, type Urlaub, type UrlaubCategory, type UrlaubExpense } from '../types/Urlaub';
+import { DropdownMenu } from './DropdownMenu';
 
 interface UrlaubeSectionProps {
   urlaube: Urlaub[];
@@ -130,7 +131,7 @@ const CategoryExpenses: React.FC<{
   );
 };
 
-const UrlaubCard: React.FC<{ urlaub: Urlaub }> = ({ urlaub }) => {
+const UrlaubCard: React.FC<{ urlaub: Urlaub; onEdit: (urlaub: Urlaub) => void }> = ({ urlaub, onEdit }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const expenses = urlaub.expenses || [];
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -147,12 +148,12 @@ const UrlaubCard: React.FC<{ urlaub: Urlaub }> = ({ urlaub }) => {
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setIsExpanded((v) => !v)}
-        className="mb-2 w-full rounded-xl border border-transparent px-1 py-2 text-left transition-colors hover:border-slate-500/30 hover:bg-white/5"
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-600/30 pb-2">
+      <div className="mb-2 flex items-center gap-2 rounded-xl border border-transparent px-1 py-2 transition-colors hover:border-slate-500/30 hover:bg-white/5">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 border-b border-slate-600/30 pb-2 text-left"
+        >
           <div className="min-w-0">
             <h4 className="truncate text-base font-semibold text-slate-200">{urlaub.name}</h4>
             <span className="text-xs text-slate-500">
@@ -170,8 +171,45 @@ const UrlaubCard: React.FC<{ urlaub: Urlaub }> = ({ urlaub }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
+        </button>
+
+        <div className="self-start pb-2">
+          <DropdownMenu
+            trigger={
+              <button
+                className="rounded-xl p-2 text-slate-400 transition-all hover:bg-slate-700/50 hover:text-slate-300"
+                title="Aktionen"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                </svg>
+              </button>
+            }
+            items={[
+              {
+                label: 'Bearbeiten',
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                ),
+                onClick: () => onEdit(urlaub),
+                variant: 'default',
+              },
+              {
+                label: 'Löschen',
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                ),
+                onClick: handleDeleteUrlaub,
+                variant: 'destructive',
+              },
+            ]}
+          />
         </div>
-      </button>
+      </div>
 
       {isExpanded && (
         <div className="space-y-2 pb-1">
@@ -184,18 +222,6 @@ const UrlaubCard: React.FC<{ urlaub: Urlaub }> = ({ urlaub }) => {
               expenses={expenses.filter((expense) => expense.category === key)}
             />
           ))}
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={handleDeleteUrlaub}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-400/80 transition-colors hover:bg-red-500/10 hover:text-red-300"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Urlaub löschen
-            </button>
-          </div>
         </div>
       )}
     </div>
@@ -204,14 +230,17 @@ const UrlaubCard: React.FC<{ urlaub: Urlaub }> = ({ urlaub }) => {
 
 export const UrlaubeSection: React.FC<UrlaubeSectionProps> = ({ urlaube, selectedYear }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUrlaubId, setEditingUrlaubId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const yearUrlaube = urlaube.filter((u) => new Date(u.startDate).getFullYear() === selectedYear);
+  const isEditing = editingUrlaubId !== null;
 
-  const openModal = () => {
+  const openCreateModal = () => {
+    setEditingUrlaubId(null);
     setName('');
     const today = new Date().toISOString().split('T')[0];
     setStartDate(today);
@@ -219,17 +248,29 @@ export const UrlaubeSection: React.FC<UrlaubeSectionProps> = ({ urlaube, selecte
     setIsModalOpen(true);
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openEditModal = (urlaub: Urlaub) => {
+    setEditingUrlaubId(urlaub.id);
+    setName(urlaub.name);
+    setStartDate(urlaub.startDate);
+    setEndDate(urlaub.endDate);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !startDate || !endDate) return;
 
     setIsSaving(true);
     try {
-      await addUrlaub(name.trim(), startDate, endDate);
+      if (editingUrlaubId) {
+        await updateUrlaub(editingUrlaubId, name.trim(), startDate, endDate);
+      } else {
+        await addUrlaub(name.trim(), startDate, endDate);
+      }
       setIsModalOpen(false);
     } catch (error) {
-      console.error('Error creating Urlaub:', error);
-      alert('Fehler beim Anlegen des Urlaubs.');
+      console.error('Error saving Urlaub:', error);
+      alert(editingUrlaubId ? 'Fehler beim Aktualisieren des Urlaubs.' : 'Fehler beim Anlegen des Urlaubs.');
     } finally {
       setIsSaving(false);
     }
@@ -244,12 +285,12 @@ export const UrlaubeSection: React.FC<UrlaubeSectionProps> = ({ urlaube, selecte
 
       <div className="space-y-3">
         {yearUrlaube.map((urlaub) => (
-          <UrlaubCard key={urlaub.id} urlaub={urlaub} />
+          <UrlaubCard key={urlaub.id} urlaub={urlaub} onEdit={openEditModal} />
         ))}
 
         <button
           type="button"
-          onClick={openModal}
+          onClick={openCreateModal}
           className="flex w-full items-center justify-center rounded-xl border-2 border-dashed border-amber-500/30 py-3 text-sm font-medium text-amber-300/80 transition-all hover:border-amber-400/50 hover:bg-amber-500/5 hover:text-amber-200"
         >
           <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -263,10 +304,10 @@ export const UrlaubeSection: React.FC<UrlaubeSectionProps> = ({ urlaube, selecte
         createPortal(
           <div className="fixed inset-0 z-50 flex min-h-dvh items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md overflow-hidden rounded-3xl border border-amber-400/20 bg-slate-900/95 shadow-2xl shadow-black/40">
-              <form onSubmit={handleCreate}>
+              <form onSubmit={handleSubmit}>
                 <div className="border-b border-amber-400/10 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-slate-900 p-5">
                   <div className="flex items-start justify-between gap-4">
-                    <h3 className="text-xl font-bold text-white">Neuer Urlaub</h3>
+                    <h3 className="text-xl font-bold text-white">{isEditing ? 'Urlaub bearbeiten' : 'Neuer Urlaub'}</h3>
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
@@ -331,7 +372,13 @@ export const UrlaubeSection: React.FC<UrlaubeSectionProps> = ({ urlaube, selecte
                     disabled={isSaving}
                     className="rounded-2xl bg-gradient-to-r from-amber-600 to-orange-500 px-5 py-3 font-semibold text-white shadow-lg shadow-amber-950/30 transition hover:from-amber-500 hover:to-orange-400 disabled:opacity-50"
                   >
-                    {isSaving ? 'Wird angelegt...' : 'Urlaub anlegen'}
+                    {isSaving
+                      ? isEditing
+                        ? 'Wird gespeichert...'
+                        : 'Wird angelegt...'
+                      : isEditing
+                        ? 'Änderungen speichern'
+                        : 'Urlaub anlegen'}
                   </button>
                 </div>
               </form>
